@@ -5,8 +5,6 @@ import (
 	"io"
 	"os"
 	"sort"
-	//"path/filepath"
-	//"strings"
 )
 
 func dirTree(out io.Writer, path string, printFiles bool) error {
