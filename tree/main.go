@@ -36,7 +36,7 @@ func dirTreeLevel(out io.Writer, path string, printFiles bool, prevPaths []bool)
 		}
 		if fileDir.IsDir() {
 			printDir(out, info, isLast, prevPaths)
-			err := dirTreeLevel(out, path+"/"+fileDir.Name(), printFiles, append(prevPaths, isLast))
+			err := dirTreeLevel(out, path+string(os.PathSeparator)+fileDir.Name(), printFiles, append(prevPaths, isLast))
 			if err != nil {
 				return err
 			}
