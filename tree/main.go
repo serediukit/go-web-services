@@ -8,10 +8,10 @@ import (
 )
 
 func dirTree(out io.Writer, path string, printFiles bool) error {
-	return dirTreeLevel(out, path, printFiles, []bool{})
+	return dirTreePathes(out, path, printFiles, []bool{})
 }
 
-func dirTreeLevel(out io.Writer, path string, printFiles bool, prevPaths []bool) error {
+func dirTreePathes(out io.Writer, path string, printFiles bool, prevPaths []bool) error {
 	file, err := os.Open(path)
 	if err != nil {
 		return err
@@ -36,7 +36,7 @@ func dirTreeLevel(out io.Writer, path string, printFiles bool, prevPaths []bool)
 		}
 		if fileDir.IsDir() {
 			printDir(out, info, isLast, prevPaths)
-			err := dirTreeLevel(out, path+string(os.PathSeparator)+fileDir.Name(), printFiles, append(prevPaths, isLast))
+			err := dirTreePathes(out, path+string(os.PathSeparator)+fileDir.Name(), printFiles, append(prevPaths, isLast))
 			if err != nil {
 				return err
 			}
