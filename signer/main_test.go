@@ -83,7 +83,7 @@ func TestSigner(t *testing.T) {
 		atomic.AddUint32(&OverheatLockCounter, 1)
 		for {
 			if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 0, 1); !swapped {
-				fmt.Println("OverheatLock happend")
+				fmt.Println("OverheatLock happened")
 				time.Sleep(time.Second)
 			} else {
 				break
@@ -94,7 +94,7 @@ func TestSigner(t *testing.T) {
 		atomic.AddUint32(&OverheatUnlockCounter, 1)
 		for {
 			if swapped := atomic.CompareAndSwapUint32(&dataSignerOverheat, 1, 0); !swapped {
-				fmt.Println("OverheatUnlock happend")
+				fmt.Println("OverheatUnlock happened")
 				time.Sleep(time.Second)
 			} else {
 				break
@@ -119,8 +119,8 @@ func TestSigner(t *testing.T) {
 		return dataHash
 	}
 
-	inputData := []int{0, 1, 1, 2, 3, 5, 8}
-	// inputData := []int{0,1}
+	//inputData := []int{0, 1, 1, 2, 3, 5, 8}
+	inputData := []int{0, 1}
 
 	hashSignJobs := []job{
 		job(func(in, out chan interface{}) {
