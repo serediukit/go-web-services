@@ -22,7 +22,10 @@ func ExecutePipeline(jobs ...job) {
 
 func SingleHash(in, out chan interface{}) {
 	data := strconv.Itoa((<-in).(int))
-	calc := DataSignerCrc32(data) + "~" + DataSignerCrc32(DataSignerMd5(data))
+	md5 := DataSignerMd5(data)
+	crc32Data := DataSignerCrc32(data)
+	crc32Md5 := DataSignerCrc32(md5)
+	calc := crc32Data + "~" + crc32Md5
 	fmt.Println("SH calc:", calc)
 	out <- calc
 	runtime.Gosched()
