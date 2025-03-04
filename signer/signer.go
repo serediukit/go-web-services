@@ -8,7 +8,7 @@ import (
 
 func ExecutePipeline(jobs ...job) {
 	in := make(chan interface{}, 1)
-	out := make(chan interface{}, 2)
+	out := make(chan interface{}, 1)
 
 	for i, job := range jobs {
 		fmt.Printf("JOB #%d\n", i)
@@ -16,7 +16,7 @@ func ExecutePipeline(jobs ...job) {
 		//fmt.Println("CHANNEL OUT:", out)
 		go job(in, out)
 		in = out
-		out = make(chan interface{}, 2)
+		out = make(chan interface{}, 1)
 	}
 }
 
