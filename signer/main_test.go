@@ -19,18 +19,18 @@ import (
 /*
 This test checks that you in fact implemented a pipeline and not accumulating all results (until the input
 is exhausted) and only then passing it to next function in pipeline. This is a wrong approach! It will not
-allow to work with tasks that requires input of undefined length. You need to pass the computed result of
+allow to work with tasks that requires to be input of undefined length. You need to pass the computed result of
 the function to the next function in pipeline as soon as it is ready.
 */
 func TestPipeline(t *testing.T) {
 
 	var ok = true
-	var recieved uint32
+	var received uint32
 	freeFlowJobs := []job{
 		job(func(in, out chan interface{}) {
 			out <- 1
 			time.Sleep(10 * time.Millisecond)
-			currRecieved := atomic.LoadUint32(&recieved)
+			currReceived := atomic.LoadUint32(&received)
 			// в чем тут суть
 			// если вы накапливаете значения, то пока вся функция не отрабоатет - дальше они не пойдут
 			// тут я проверяю, что счетчик увеличился в следующей функции
@@ -38,22 +38,22 @@ func TestPipeline(t *testing.T) {
 
 			// Here is a gist of this test:
 			// If you are accumulating values instead of implementing a pipeline, you are not passing values to the
-			// next funcion before your current function is finished. That is what I am checking: counter
+			// next function before your current function is finished. That is what I am checking: counter
 			// should increase in next function (meaning that values are going there) before current function
 			// finished its execution.
 
-			if currRecieved == 0 {
+			if currReceived == 0 {
 				ok = false
 			}
 		}),
 		job(func(in, out chan interface{}) {
 			for _ = range in {
-				atomic.AddUint32(&recieved, 1)
+				atomic.AddUint32(&received, 1)
 			}
 		}),
 	}
 	ExecutePipeline(freeFlowJobs...)
-	if !ok || recieved == 0 {
+	if !ok || received == 0 {
 		t.Errorf("no value free flow - dont collect them")
 	}
 }
