@@ -3,8 +3,11 @@ package main
 import (
 	"fmt"
 	"strconv"
+	"strings"
 	"sync"
 )
+
+const threadNums = 6
 
 func ExecutePipeline(jobs ...job) {
 	in := make(chan interface{}, 1)
@@ -67,17 +70,42 @@ func SingleHash(in, out chan interface{}) {
 }
 
 func MultiHash(in, out chan interface{}) {
+	wg := &sync.WaitGroup{}
+
 	for i := range in {
-		str := ""
-		data := (i).(string)
-		for j := 0; j <= 5; j++ {
-			calc := DataSignerCrc32(strconv.Itoa(j) + data)
-			fmt.Println("MH calc:", calc)
-			str += calc
-		}
-		out <- str
-		fmt.Println("MH str:", str)
+		wg.Add(1)
+		data := i.(string)
+
+		go func(data string) {
+			defer wg.Done()
+
+			threadWG := &sync.WaitGroup{}
+			threadMU := &sync.Mutex{}
+			threadRes := make([]string, threadNums)
+
+			for th := range threadNums {
+				threadWG.Add(th)
+
+				go func(thIndex int) {
+					defer threadWG.Done()
+
+					val := strconv.Itoa(th) + data
+
+					threadMU.Lock()
+					threadRes[thIndex] = val
+					threadMU.Unlock()
+				}(th)
+			}
+
+			threadWG.Wait()
+
+			str := strings.Join(threadRes, "")
+
+			out <- str
+		}(data)
 	}
+
+	wg.Wait()
 }
 
 func CombineResults(in, out chan interface{}) {
