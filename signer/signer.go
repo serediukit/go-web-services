@@ -116,19 +116,3 @@ func CombineResults(in, out chan interface{}) {
 	sort.Strings(res)
 	out <- strings.Join(res, "_")
 }
-
-//func main() {
-//
-//	jobStart := func(in, out chan interface{}) {
-//		out <- 0
-//		out <- 1
-//	}
-//
-//	jobEnd := func(in, out chan interface{}) {
-//		for i := range in {
-//			fmt.Println("END GET:", i)
-//		}
-//	}
-//
-//	ExecutePipeline(jobStart, SingleHash, MultiHash, CombineResults, jobEnd)
-//}
