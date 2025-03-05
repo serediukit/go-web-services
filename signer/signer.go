@@ -1,7 +1,7 @@
 package main
 
 import (
-	"fmt"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -84,7 +84,7 @@ func MultiHash(in, out chan interface{}) {
 			threadRes := make([]string, threadNums)
 
 			for th := range threadNums {
-				threadWG.Add(th)
+				threadWG.Add(1)
 
 				go func(thIndex int) {
 					defer threadWG.Done()
@@ -92,7 +92,7 @@ func MultiHash(in, out chan interface{}) {
 					val := strconv.Itoa(th) + data
 
 					threadMU.Lock()
-					threadRes[thIndex] = val
+					threadRes[thIndex] = DataSignerCrc32(val)
 					threadMU.Unlock()
 				}(th)
 			}
@@ -109,26 +109,26 @@ func MultiHash(in, out chan interface{}) {
 }
 
 func CombineResults(in, out chan interface{}) {
-	str := (<-in).(string)
+	var res []string
 	for i := range in {
-		str += "_" + i.(string)
+		res = append(res, i.(string))
 	}
-	out <- str
+	sort.Strings(res)
+	out <- strings.Join(res, "_")
 }
 
-func main() {
-
-	jobStart := func(in, out chan interface{}) {
-		out <- 0
-		out <- 1
-		out <- 2
-	}
-
-	jobEnd := func(in, out chan interface{}) {
-		for i := range in {
-			fmt.Println("END GET:", i)
-		}
-	}
-
-	ExecutePipeline(jobStart, SingleHash, MultiHash, CombineResults, jobEnd)
-}
+//func main() {
+//
+//	jobStart := func(in, out chan interface{}) {
+//		out <- 0
+//		out <- 1
+//	}
+//
+//	jobEnd := func(in, out chan interface{}) {
+//		for i := range in {
+//			fmt.Println("END GET:", i)
+//		}
+//	}
+//
+//	ExecutePipeline(jobStart, SingleHash, MultiHash, CombineResults, jobEnd)
+//}
