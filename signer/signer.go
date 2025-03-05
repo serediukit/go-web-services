@@ -2,7 +2,6 @@ package main
 
 import (
 	"fmt"
-	"runtime"
 	"strconv"
 	"sync"
 )
@@ -13,37 +12,58 @@ func ExecutePipeline(jobs ...job) {
 
 	wg := &sync.WaitGroup{}
 
-	for i, j := range jobs {
+	for _, jb := range jobs {
 		in = out
 		out = make(chan interface{}, 100)
 
-		fmt.Printf("JOB #%d\n", i)
-		//fmt.Println("CHANNEL IN:", in)
-		//fmt.Println("CHANNEL OUT:", out)
-
 		wg.Add(1)
-		go func(j job, in, out chan interface{}) {
+		go func(jb job, in, out chan interface{}) {
 			defer wg.Done()
 			defer close(out)
 
-			j(in, out)
-		}(j, in, out)
+			jb(in, out)
+		}(jb, in, out)
 	}
 
 	wg.Wait()
 }
 
 func SingleHash(in, out chan interface{}) {
+	wg := &sync.WaitGroup{}
+	mu := &sync.Mutex{}
+
 	for i := range in {
+		wg.Add(1)
 		data := strconv.Itoa(i.(int))
-		md5 := DataSignerMd5(data)
-		crc32Data := DataSignerCrc32(data)
-		crc32Md5 := DataSignerCrc32(md5)
-		calc := crc32Data + "~" + crc32Md5
-		fmt.Println("SH calc:", calc)
-		out <- calc
-		runtime.Gosched()
+
+		go func(data string) {
+			defer wg.Done()
+
+			crc32DataCh := make(chan string)
+			go func() {
+				defer close(crc32DataCh)
+
+				crc32DataCh <- DataSignerCrc32(data)
+			}()
+
+			crc32Md5Ch := make(chan string)
+			go func() {
+				defer close(crc32Md5Ch)
+
+				mu.Lock()
+				md5 := DataSignerMd5(data)
+				mu.Unlock()
+
+				crc32Md5Ch <- DataSignerCrc32(md5)
+			}()
+
+			calc := <-crc32DataCh + "~" + <-crc32Md5Ch
+
+			out <- calc
+		}(data)
 	}
+
+	wg.Wait()
 }
 
 func MultiHash(in, out chan interface{}) {
@@ -73,6 +93,7 @@ func main() {
 	jobStart := func(in, out chan interface{}) {
 		out <- 0
 		out <- 1
+		out <- 2
 	}
 
 	jobEnd := func(in, out chan interface{}) {
