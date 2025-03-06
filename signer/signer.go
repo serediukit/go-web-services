@@ -1,10 +1,12 @@
 package main
 
 import (
+	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
+	"time"
 )
 
 const threadNums = 6
@@ -32,6 +34,8 @@ func ExecutePipeline(jobs ...job) {
 }
 
 func SingleHash(in, out chan interface{}) {
+	start := time.Now()
+
 	wg := &sync.WaitGroup{}
 	mu := &sync.Mutex{}
 
@@ -67,6 +71,10 @@ func SingleHash(in, out chan interface{}) {
 	}
 
 	wg.Wait()
+
+	end := time.Since(start)
+
+	fmt.Println("Single hash took", end)
 }
 
 func MultiHash(in, out chan interface{}) {
