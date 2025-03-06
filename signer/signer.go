@@ -78,6 +78,8 @@ func SingleHash(in, out chan interface{}) {
 }
 
 func MultiHash(in, out chan interface{}) {
+	start := time.Now()
+
 	wg := &sync.WaitGroup{}
 
 	for i := range in {
@@ -114,13 +116,23 @@ func MultiHash(in, out chan interface{}) {
 	}
 
 	wg.Wait()
+
+	end := time.Since(start)
+
+	fmt.Println("Single hash took", end)
 }
 
 func CombineResults(in, out chan interface{}) {
+	start := time.Now()
+
 	var res []string
 	for i := range in {
 		res = append(res, i.(string))
 	}
 	sort.Strings(res)
 	out <- strings.Join(res, "_")
+
+	end := time.Since(start)
+
+	fmt.Println("Single hash took", end)
 }
