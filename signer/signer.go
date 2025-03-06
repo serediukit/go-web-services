@@ -119,7 +119,7 @@ func MultiHash(in, out chan interface{}) {
 
 	end := time.Since(start)
 
-	fmt.Println("Single hash took", end)
+	fmt.Println("Multi hash took", end)
 }
 
 func CombineResults(in, out chan interface{}) {
@@ -134,5 +134,5 @@ func CombineResults(in, out chan interface{}) {
 
 	end := time.Since(start)
 
-	fmt.Println("Single hash took", end)
+	fmt.Println("Combine results took", end)
 }
