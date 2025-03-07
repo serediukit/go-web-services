@@ -1,12 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"sort"
 	"strconv"
 	"strings"
 	"sync"
-	"time"
 )
 
 const threadNums = 6
@@ -34,9 +32,6 @@ func ExecutePipeline(jobs ...job) {
 }
 
 func SingleHash(in, out chan interface{}) {
-	start := time.Now()
-	fmt.Println("Single hash started at:", start.Format("2006-01-02 15:04:05"))
-
 	wg := &sync.WaitGroup{}
 	mu := &sync.Mutex{}
 
@@ -70,16 +65,9 @@ func SingleHash(in, out chan interface{}) {
 	}
 
 	wg.Wait()
-
-	end := time.Since(start)
-
-	fmt.Println("Single hash took", end)
 }
 
 func MultiHash(in, out chan interface{}) {
-	start := time.Now()
-	fmt.Println("Multi hash started at:", start.Format("2006-01-02 15:04:05"))
-
 	wg := &sync.WaitGroup{}
 
 	for i := range in {
@@ -111,24 +99,13 @@ func MultiHash(in, out chan interface{}) {
 	}
 
 	wg.Wait()
-
-	end := time.Since(start)
-
-	fmt.Println("Multi hash took", end)
 }
 
 func CombineResults(in, out chan interface{}) {
-	start := time.Now()
-	fmt.Println("Combine results started at:", start.Format("2006-01-02 15:04:05"))
-
 	var res []string
 	for i := range in {
 		res = append(res, i.(string))
 	}
 	sort.Strings(res)
 	out <- strings.Join(res, "_")
-
-	end := time.Since(start)
-
-	fmt.Println("Combine results took", end)
 }
