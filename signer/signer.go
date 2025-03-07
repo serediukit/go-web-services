@@ -35,6 +35,7 @@ func ExecutePipeline(jobs ...job) {
 
 func SingleHash(in, out chan interface{}) {
 	start := time.Now()
+	fmt.Println("Single hash started at:", start.Format("2006-01-02 15:04:05"))
 
 	wg := &sync.WaitGroup{}
 	mu := &sync.Mutex{}
@@ -64,9 +65,7 @@ func SingleHash(in, out chan interface{}) {
 				crc32Md5Ch <- DataSignerCrc32(md5)
 			}()
 
-			calc := <-crc32DataCh + "~" + <-crc32Md5Ch
-
-			out <- calc
+			out <- <-crc32DataCh + "~" + <-crc32Md5Ch
 		}(data)
 	}
 
@@ -79,6 +78,7 @@ func SingleHash(in, out chan interface{}) {
 
 func MultiHash(in, out chan interface{}) {
 	start := time.Now()
+	fmt.Println("Multi hash started at:", start.Format("2006-01-02 15:04:05"))
 
 	wg := &sync.WaitGroup{}
 
@@ -90,7 +90,6 @@ func MultiHash(in, out chan interface{}) {
 			defer wg.Done()
 
 			threadWG := &sync.WaitGroup{}
-			threadMU := &sync.Mutex{}
 			threadRes := make([]string, threadNums)
 
 			for th := range threadNums {
@@ -101,17 +100,13 @@ func MultiHash(in, out chan interface{}) {
 
 					val := strconv.Itoa(th) + data
 
-					threadMU.Lock()
 					threadRes[thIndex] = DataSignerCrc32(val)
-					threadMU.Unlock()
 				}(th)
 			}
 
 			threadWG.Wait()
 
-			str := strings.Join(threadRes, "")
-
-			out <- str
+			out <- strings.Join(threadRes, "")
 		}(data)
 	}
 
@@ -124,6 +119,7 @@ func MultiHash(in, out chan interface{}) {
 
 func CombineResults(in, out chan interface{}) {
 	start := time.Now()
+	fmt.Println("Combine results started at:", start.Format("2006-01-02 15:04:05"))
 
 	var res []string
 	for i := range in {
