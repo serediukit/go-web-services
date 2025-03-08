@@ -7,7 +7,7 @@ import (
 	"sync"
 )
 
-const threadNums = 6
+const multiHashThreadsNum = 6
 
 func ExecutePipeline(jobs ...job) {
 	in := make(chan interface{}, 1)
@@ -78,9 +78,9 @@ func MultiHash(in, out chan interface{}) {
 			defer wg.Done()
 
 			threadWG := &sync.WaitGroup{}
-			threadRes := make([]string, threadNums)
+			threadRes := make([]string, multiHashThreadsNum)
 
-			for th := range threadNums {
+			for th := range multiHashThreadsNum {
 				threadWG.Add(1)
 
 				go func(thIndex int) {
