@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
-	"io/ioutil"
 	"os"
 	"regexp"
 	"strings"
@@ -24,13 +23,13 @@ func FastSearch(out io.Writer) {
 		panic(err)
 	}
 
-	fileContents, err := ioutil.ReadAll(file)
+	fileContents, err := io.ReadAll(file)
 	if err != nil {
 		panic(err)
 	}
 
 	r := regexp.MustCompile("@")
-	seenBrowsers := []string{}
+	var seenBrowsers []string
 	uniqueBrowsers := 0
 	foundUsers := ""
 
@@ -78,14 +77,6 @@ func FastSearch(out io.Writer) {
 					uniqueBrowsers++
 				}
 			}
-		}
-
-		for _, browserRaw := range browsers {
-			browser, ok := browserRaw.(string)
-			if !ok {
-				// log.Println("cant cast browser to string")
-				continue
-			}
 			if ok, err := regexp.MatchString("MSIE", browser); ok && err == nil {
 				isMSIE = true
 				notSeenBefore := true
@@ -118,5 +109,7 @@ func FastSearch(out io.Writer) {
 /*
 
 	Звіт
+
+	прибрав зайвий цикл із повторним зайвим перетворення у string
 
 */
