@@ -64,23 +64,14 @@ func FastSearch(out io.Writer) {
 				log.Println("cant cast browser to string")
 				continue
 			}
-			if strings.Contains(browser, "Android") {
-				isAndroid = true
-				notSeenBefore := true
-				for _, item := range seenBrowsers {
-					if item == browser {
-						notSeenBefore = false
-						break
-					}
+			hasAndroid := strings.Contains(browser, "Android")
+			hasMSIE := strings.Contains(browser, "MSIE")
+			if hasAndroid || hasMSIE {
+				if hasAndroid {
+					isAndroid = true
+				} else {
+					isMSIE = true
 				}
-				if notSeenBefore {
-					// log.Printf("SLOW New browser: %s, first seen: %s", browser, user["name"])
-					seenBrowsers = append(seenBrowsers, browser)
-					uniqueBrowsers++
-				}
-			}
-			if strings.Contains(browser, "MSIE") {
-				isMSIE = true
 				notSeenBefore := true
 				for _, item := range seenBrowsers {
 					if item == browser {
@@ -116,5 +107,7 @@ func FastSearch(out io.Writer) {
 	прибрав зайвий цикл із повторним зайвим перетворення у string
 
 	замінив регулярний вираз на strings.Contains()
+
+	об'єднав два if в один для уникнення повторних обчислень
 
 */
