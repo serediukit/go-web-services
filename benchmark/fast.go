@@ -70,6 +70,7 @@ func FastSearch(out io.Writer) {
 				for _, item := range seenBrowsers {
 					if item == browser {
 						notSeenBefore = false
+						break
 					}
 				}
 				if notSeenBefore {
@@ -84,6 +85,7 @@ func FastSearch(out io.Writer) {
 				for _, item := range seenBrowsers {
 					if item == browser {
 						notSeenBefore = false
+						break
 					}
 				}
 				if notSeenBefore {
