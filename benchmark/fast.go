@@ -4,6 +4,7 @@ import (
 	"encoding/json"
 	"fmt"
 	"io"
+	"log"
 	"os"
 	"regexp"
 	"strings"
@@ -53,17 +54,17 @@ func FastSearch(out io.Writer) {
 
 		browsers, ok := user["browsers"].([]interface{})
 		if !ok {
-			// log.Println("cant cast browsers")
+			log.Println("cant cast browsers")
 			continue
 		}
 
 		for _, browserRaw := range browsers {
 			browser, ok := browserRaw.(string)
 			if !ok {
-				// log.Println("cant cast browser to string")
+				log.Println("cant cast browser to string")
 				continue
 			}
-			if ok, err := regexp.MatchString("Android", browser); ok && err == nil {
+			if strings.Contains(browser, "Android") {
 				isAndroid = true
 				notSeenBefore := true
 				for _, item := range seenBrowsers {
@@ -77,7 +78,7 @@ func FastSearch(out io.Writer) {
 					uniqueBrowsers++
 				}
 			}
-			if ok, err := regexp.MatchString("MSIE", browser); ok && err == nil {
+			if strings.Contains(browser, "MSIE") {
 				isMSIE = true
 				notSeenBefore := true
 				for _, item := range seenBrowsers {
@@ -111,5 +112,7 @@ func FastSearch(out io.Writer) {
 	Звіт
 
 	прибрав зайвий цикл із повторним зайвим перетворення у string
+
+	замінив регулярний вираз на strings.Contains()
 
 */
