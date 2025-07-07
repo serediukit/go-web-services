@@ -76,8 +76,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	data.Print()
-	result, err := json.Marshal(data)
+	result, err := json.Marshal(data.Users)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
 		return
