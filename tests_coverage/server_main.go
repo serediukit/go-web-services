@@ -29,15 +29,16 @@ type XmlData struct {
 
 const AccessToken = "access_token_123_456"
 
-func main() {
-	http.HandleFunc("/", SearchServer)
-
-	fmt.Println("Starting server on port 8080")
-	err := http.ListenAndServe(":8080", nil)
-	if err != nil {
-		return
-	}
-}
+// main() is used for manual server listening
+//func main() {
+//	http.HandleFunc("/", SearchServer)
+//
+//	fmt.Println("Starting server on port 8080")
+//	err := http.ListenAndServe(":8080", nil)
+//	if err != nil {
+//		return
+//	}
+//}
 
 func SearchServer(w http.ResponseWriter, r *http.Request) {
 	if r.Method != "GET" {
