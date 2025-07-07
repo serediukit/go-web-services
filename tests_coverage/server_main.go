@@ -62,6 +62,11 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	}
 
 	orderField := query.Get("order_field")
+	if !slices.Contains([]string{"Id", "Name", "Age", ""}, orderField) {
+		sendError(w, http.StatusBadRequest, fmt.Errorf("ErrorBadOrderField"))
+		return
+	}
+
 	orderBy, _ := strconv.Atoi(query.Get("order_by"))
 	err = data.sort(orderField, orderBy)
 	if err != nil {

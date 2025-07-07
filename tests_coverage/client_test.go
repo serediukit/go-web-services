@@ -42,22 +42,39 @@ func NewTestServer(token string) *TestServer {
 	}
 }
 
-func TestCorrect(t *testing.T) {
+func TestWithNextPage(t *testing.T) {
 	ts := NewTestServer(AccessToken)
 	defer ts.Close()
 
 	resp, err := ts.client.FindUsers(goodRequest)
 	if err != nil {
 		t.Error(err)
+	} else if resp == nil {
+		t.Error("response is nil")
+	} else if len(resp.Users) != 2 {
+		t.Errorf("response length mismatch: expected 2, got %d", len(resp.Users))
+	} else if !resp.NextPage {
+		t.Error("next page is false")
+	}
+}
+
+func TestWithoutNextPage(t *testing.T) {
+	ts := NewTestServer(AccessToken)
+	defer ts.Close()
+
+	req := goodRequest
+	req.Limit = 100
+
+	resp, err := ts.client.FindUsers(req)
+	if err != nil {
+		t.Error(err)
 	}
 	if resp == nil {
 		t.Error("response is nil")
-	}
-	if len(resp.Users) != 2 {
-		t.Errorf("response length mismatch: expected 2, got %d", len(resp.Users))
-	}
-	if !resp.NextPage {
-		t.Error("next page is false")
+	} else if len(resp.Users) != 23 {
+		t.Errorf("response length mismatch: expected 23, got %d", len(resp.Users))
+	} else if resp.NextPage {
+		t.Error("next page is true")
 	}
 }
 
@@ -90,7 +107,7 @@ func TestInvalidServer(t *testing.T) {
 	if err == nil {
 		t.Error("error is nil")
 	} else if !strings.Contains(err.Error(), "unknown error") {
-		t.Error(err)
+		t.Errorf("Invalid error: %v", err.Error())
 	}
 }
 
@@ -106,7 +123,7 @@ func TestTimeout(t *testing.T) {
 	if err == nil {
 		t.Error("error is nil")
 	} else if !strings.Contains(err.Error(), "timeout for") {
-		t.Error(err)
+		t.Errorf("Invalid error: %v", err.Error())
 	}
 }
 
@@ -118,11 +135,27 @@ func TestInvalidToken(t *testing.T) {
 	if err == nil {
 		t.Error("error is nil")
 	} else if err.Error() != "Bad AccessToken" {
-		t.Error(err)
+		t.Errorf("Invalid error: %v", err.Error())
 	}
 }
 
-func TestCantuUnpack(t *testing.T) {
+func TestCantUnpack(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Some Error", http.StatusBadRequest)
+	}))
+	c := SearchClient{AccessToken, s.URL}
+	defer s.Close()
+
+	_, err := c.FindUsers(SearchRequest{})
+
+	if err == nil {
+		t.Errorf("error is nil")
+	} else if !strings.Contains(err.Error(), "cant unpack error json") {
+		t.Errorf("Invalid error: %v", err.Error())
+	}
+}
+
+func TestCantUnpackResult(t *testing.T) {
 	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		_, _ = w.Write([]byte("None"))
 	}))
@@ -134,7 +167,39 @@ func TestCantuUnpack(t *testing.T) {
 	if err == nil {
 		t.Error("error is nil")
 	} else if !strings.Contains(err.Error(), "cant unpack result json") {
-		t.Error(err)
+		t.Errorf("Invalid error: %v", err.Error())
+	}
+}
+
+func TestUnknownBadRequestError(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		sendError(w, http.StatusBadRequest, fmt.Errorf("bad request"))
+	}))
+	c := SearchClient{AccessToken, s.URL}
+	defer s.Close()
+
+	_, err := c.FindUsers(SearchRequest{})
+
+	if err == nil {
+		t.Errorf("error is nil")
+	} else if !strings.Contains(err.Error(), "unknown bad request error") {
+		t.Errorf("Invalid error: %v", err.Error())
+	}
+}
+
+func TestFatalError(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		http.Error(w, "Fatal Error", http.StatusInternalServerError)
+	}))
+	c := SearchClient{AccessToken, s.URL}
+	defer s.Close()
+
+	_, err := c.FindUsers(SearchRequest{})
+
+	if err == nil {
+		t.Errorf("Empty error")
+	} else if err.Error() != "SearchServer fatal error" {
+		t.Errorf("Invalid error: %v", err.Error())
 	}
 }
 
@@ -157,12 +222,12 @@ func TestErrorReceiving(t *testing.T) {
 		{
 			name: "bad order field",
 			req:  SearchRequest{OrderField: "bad_field"},
-			err:  fmt.Errorf("unknown bad request error: %s", ErrorBadOrderField),
+			err:  fmt.Errorf("OrderFeld bad_field invalid"),
 		},
 		{
 			name: "bad order field register",
 			req:  SearchRequest{OrderField: "name"},
-			err:  fmt.Errorf("unknown bad request error: %s", ErrorBadOrderField),
+			err:  fmt.Errorf("OrderFeld name invalid"),
 		},
 	}
 
