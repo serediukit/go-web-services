@@ -4,7 +4,9 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"testing"
+	"time"
 )
 
 var goodRequest = SearchRequest{
@@ -78,12 +80,60 @@ func TestOrderField(t *testing.T) {
 	}
 }
 
-func TestIncorrectToken(t *testing.T) {
+func TestInvalidServer(t *testing.T) {
+	ts := NewTestServer(AccessToken)
+	defer ts.Close()
+
+	ts.client.URL = "http://invalid.server.com"
+
+	_, err := ts.client.FindUsers(goodRequest)
+	if err == nil {
+		t.Error("error is nil")
+	} else if !strings.Contains(err.Error(), "unknown error") {
+		t.Error(err)
+	}
+}
+
+func TestTimeout(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		time.Sleep(2 * time.Second)
+	}))
+	defer s.Close()
+
+	c := &SearchClient{AccessToken, s.URL}
+
+	_, err := c.FindUsers(goodRequest)
+	if err == nil {
+		t.Error("error is nil")
+	} else if !strings.Contains(err.Error(), "timeout for") {
+		t.Error(err)
+	}
+}
+
+func TestInvalidToken(t *testing.T) {
 	ts := NewTestServer("incorrect_token")
 	defer ts.Close()
 
 	_, err := ts.client.FindUsers(goodRequest)
-	if err != nil && err.Error() != "Bad AccessToken" {
+	if err == nil {
+		t.Error("error is nil")
+	} else if err.Error() != "Bad AccessToken" {
+		t.Error(err)
+	}
+}
+
+func TestCantuUnpack(t *testing.T) {
+	s := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, _ = w.Write([]byte("None"))
+	}))
+	defer s.Close()
+
+	c := &SearchClient{AccessToken, s.URL}
+
+	_, err := c.FindUsers(goodRequest)
+	if err == nil {
+		t.Error("error is nil")
+	} else if !strings.Contains(err.Error(), "cant unpack result json") {
 		t.Error(err)
 	}
 }
