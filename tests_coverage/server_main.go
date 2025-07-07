@@ -57,6 +57,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	err := data.load(query.Get("query"))
 	if err != nil {
 		sendError(w, http.StatusBadRequest, err)
+		return
 	}
 
 	orderField := query.Get("order_field")
@@ -64,6 +65,7 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	err = data.sort(orderField, orderBy)
 	if err != nil {
 		sendError(w, http.StatusBadRequest, err)
+		return
 	}
 
 	limit, _ := strconv.Atoi(query.Get("limit"))
@@ -71,12 +73,14 @@ func SearchServer(w http.ResponseWriter, r *http.Request) {
 	err = data.setLimitOffset(limit, offset)
 	if err != nil {
 		sendError(w, http.StatusBadRequest, err)
+		return
 	}
 
 	data.Print()
 	result, err := json.Marshal(data)
 	if err != nil {
 		w.WriteHeader(http.StatusInternalServerError)
+		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
