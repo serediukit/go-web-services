@@ -102,7 +102,7 @@ func sendError(w http.ResponseWriter, code int, err error) {
 func (data *XmlData) load(query string) error {
 	fileData, err := os.ReadFile("dataset.xml")
 	if err != nil {
-		panic(err)
+		return err
 	}
 
 	decoder := xml.NewDecoder(bytes.NewReader(fileData))
