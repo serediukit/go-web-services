@@ -10,6 +10,7 @@ import (
 	"os"
 	"slices"
 	"sort"
+	"strconv"
 	"strings"
 )
 
@@ -26,6 +27,8 @@ type XmlData struct {
 	Users []User
 }
 
+const AccessToken = "access_token_123_456"
+
 func main() {
 	http.HandleFunc("/", SearchServer)
 
@@ -37,39 +40,59 @@ func main() {
 }
 
 func SearchServer(w http.ResponseWriter, r *http.Request) {
-	params := SearchRequest{
-		Limit:      10,
-		Offset:     0,
-		Query:      "ipsum",
-		OrderField: "Id",
-		OrderBy:    OrderByAsc,
+	if r.Method != "GET" {
+		w.WriteHeader(http.StatusBadRequest)
+		return
+	}
+
+	if r.Header.Get("AccessToken") != AccessToken {
+		w.WriteHeader(http.StatusUnauthorized)
+		return
 	}
 
 	data := &XmlData{}
 
-	err := data.load(params.Query)
+	query := r.URL.Query()
+
+	err := data.load(query.Get("query"))
 	if err != nil {
-		panic(err)
+		sendError(w, http.StatusBadRequest, err)
 	}
 
-	err = data.sort(params.OrderField, params.OrderBy)
+	orderField := query.Get("order_field")
+	orderBy, _ := strconv.Atoi(query.Get("order_by"))
+	err = data.sort(orderField, orderBy)
 	if err != nil {
-		panic(err)
+		sendError(w, http.StatusBadRequest, err)
 	}
 
-	err = data.setLimitOffset(params.Limit, params.Offset)
+	limit, _ := strconv.Atoi(query.Get("limit"))
+	offset, _ := strconv.Atoi(query.Get("offset"))
+	err = data.setLimitOffset(limit, offset)
 	if err != nil {
-		panic(err)
+		sendError(w, http.StatusBadRequest, err)
 	}
 
 	data.Print()
 	result, err := json.Marshal(data)
 	if err != nil {
-		panic(err)
+		w.WriteHeader(http.StatusInternalServerError)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	w.Write(result)
+	_, _ = w.Write(result)
+}
+
+func sendError(w http.ResponseWriter, code int, err error) {
+	data, err := json.Marshal(SearchErrorResponse{Error: err.Error()})
+	if err != nil {
+		w.WriteHeader(http.StatusInternalServerError)
+		return
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.WriteHeader(code)
+	_, _ = w.Write(data)
 }
 
 func (data *XmlData) load(query string) error {
