@@ -2,10 +2,13 @@ package main
 
 import (
 	"bytes"
+	"encoding/json"
 	"encoding/xml"
 	"fmt"
 	"io"
+	"net/http"
 	"os"
+	"slices"
 	"sort"
 	"strings"
 )
@@ -23,8 +26,17 @@ type XmlData struct {
 	Users []User
 }
 
-// код писать тут
 func main() {
+	http.HandleFunc("/", SearchServer)
+
+	fmt.Println("Starting server on port 8080")
+	err := http.ListenAndServe(":8080", nil)
+	if err != nil {
+		return
+	}
+}
+
+func SearchServer(w http.ResponseWriter, r *http.Request) {
 	params := SearchRequest{
 		Limit:      10,
 		Offset:     0,
@@ -33,67 +45,54 @@ func main() {
 		OrderBy:    OrderByAsc,
 	}
 
-	data := readXml(params.Query)
+	data := &XmlData{}
 
-	if params.OrderBy != OrderByAsIs {
-		sort.Slice(
-			data.Users,
-			func(i, j int) bool {
-				var res bool
-				switch params.OrderField {
-				case "Id":
-					res = data.Users[i].Id < data.Users[j].Id
-				case "Name":
-					fallthrough
-				case "":
-					res = data.Users[i].Name < data.Users[j].Name
-				case "Age":
-					res = data.Users[i].Age < data.Users[j].Age
-				default:
-					panic(fmt.Errorf(ErrorBadOrderField))
-				}
-				if params.OrderBy == OrderByAsc {
-					return res
-				} else {
-					return !res
-				}
-			},
-		)
+	err := data.load(params.Query)
+	if err != nil {
+		panic(err)
 	}
 
-	if params.Limit > 0 {
-		if params.Offset > len(data.Users)-1 {
-			data.Users = []User{}
-		} else if params.Offset+params.Limit > len(data.Users) {
-			data.Users = data.Users[params.Offset:]
-		} else {
-			data.Users = data.Users[params.Offset : params.Offset+params.Limit]
-		}
+	err = data.sort(params.OrderField, params.OrderBy)
+	if err != nil {
+		panic(err)
 	}
+
+	err = data.setLimitOffset(params.Limit, params.Offset)
+	if err != nil {
+		panic(err)
+	}
+
+	data.Print()
+	result, err := json.Marshal(data)
+	if err != nil {
+		panic(err)
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(result)
 }
 
-func readXml(query string) *XmlData {
+func (data *XmlData) load(query string) error {
 	fileData, err := os.ReadFile("dataset.xml")
 	if err != nil {
 		panic(err)
 	}
 
 	decoder := xml.NewDecoder(bytes.NewReader(fileData))
-	var data XmlData
 
 	for {
 		t, err := decoder.Token()
 		if err != nil {
 			if err == io.EOF {
-				break
+				return nil
 			}
-			panic(err)
+			return err
 		}
 		if start, ok := t.(xml.StartElement); ok && start.Name.Local == "row" {
 			var row XmlRow
 			err := decoder.DecodeElement(&row, &start)
 			if err != nil {
-				panic(err)
+				return err
 			}
 
 			user := User{
@@ -109,6 +108,60 @@ func readXml(query string) *XmlData {
 			}
 		}
 	}
+}
 
-	return &data
+func (data *XmlData) sort(orderField string, orderBy int) error {
+	if !slices.Contains([]int{OrderByAsc, OrderByAsIs, OrderByDesc}, orderBy) {
+		return fmt.Errorf("OrderBy invalid")
+	}
+	if !slices.Contains([]string{"Id", "Name", "Age", ""}, orderField) {
+		return fmt.Errorf(ErrorBadOrderField)
+	}
+	if orderBy != OrderByAsIs {
+		sort.Slice(
+			data.Users,
+			func(i, j int) bool {
+				var res bool
+				switch orderField {
+				case "Id":
+					res = data.Users[i].Id < data.Users[j].Id
+				case "Age":
+					res = data.Users[i].Age < data.Users[j].Age
+				case "":
+					fallthrough
+				case "Name":
+					res = data.Users[i].Name < data.Users[j].Name
+				}
+				if orderBy == OrderByAsc {
+					return res
+				} else {
+					return !res
+				}
+			},
+		)
+	}
+	return nil
+}
+
+func (data *XmlData) setLimitOffset(limit int, offset int) error {
+	if limit > 0 {
+		if offset > len(data.Users)-1 {
+			data.Users = []User{}
+		} else if offset+limit > len(data.Users) {
+			data.Users = data.Users[offset:]
+		} else {
+			data.Users = data.Users[offset : offset+limit]
+		}
+		return nil
+	}
+	return fmt.Errorf("limit invalid")
+}
+
+func (data *XmlData) Print() {
+	encoder := xml.NewEncoder(os.Stdout)
+	encoder.Indent("", "  ")
+	err := encoder.Encode(data)
+	if err != nil {
+		panic(err)
+	}
 }
