@@ -26,11 +26,11 @@ var (
 
 	uint64Tpl = template.Must(template.New("int64Tpl").Parse(`
 	// {{.FieldName}}
-	{{.FieldName}}Raw, err := strconv.Atoi(params.Get("{{.FieldName}}"))
+	{{.FieldName}}Raw, err := strconv.ParseUint(params.Get("{{.FieldName}}"), 10, 64)
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be uint64")}
 	}
-	obj.{{.FieldName}} = uint64({{.FieldName}}Raw)
+	obj.{{.FieldName}} = {{.FieldName}}Raw
 `))
 
 	strTpl = template.Must(template.New("strTpl").Parse(`

@@ -10,11 +10,11 @@ import (
 func (obj *MyApi) Unpack(params url.Values) error {
 
 	// nextID
-	nextIDRaw, err := strconv.Atoi(params.Get("nextID"))
+	nextIDRaw, err := strconv.ParseUint(params.Get("nextID"), 10, 64)
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid nextID - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid nextID - must be uint64")}
 	}
-	obj.nextID = uint64(nextIDRaw)
+	obj.nextID = nextIDRaw
 
 	return nil
 }
@@ -55,11 +55,11 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 func (obj *User) Unpack(params url.Values) error {
 
 	// ID
-	IDRaw, err := strconv.Atoi(params.Get("ID"))
+	IDRaw, err := strconv.ParseUint(params.Get("ID"), 10, 64)
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
 	}
-	obj.ID = uint64(IDRaw)
+	obj.ID = IDRaw
 
 	// Login
 	LoginRaw := params.Get("Login")
@@ -82,11 +82,11 @@ func (obj *User) Unpack(params url.Values) error {
 func (obj *NewUser) Unpack(params url.Values) error {
 
 	// ID
-	IDRaw, err := strconv.Atoi(params.Get("ID"))
+	IDRaw, err := strconv.ParseUint(params.Get("ID"), 10, 64)
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
 	}
-	obj.ID = uint64(IDRaw)
+	obj.ID = IDRaw
 
 	return nil
 }
@@ -123,11 +123,11 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 func (obj *OtherUser) Unpack(params url.Values) error {
 
 	// ID
-	IDRaw, err := strconv.Atoi(params.Get("ID"))
+	IDRaw, err := strconv.ParseUint(params.Get("ID"), 10, 64)
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
 	}
-	obj.ID = uint64(IDRaw)
+	obj.ID = IDRaw
 
 	// Login
 	LoginRaw := params.Get("Login")
