@@ -1,49 +1,148 @@
 package main
 
-import "encoding/binary"
-import "bytes"
+import (
+	"fmt"
+	"net/http"
+	"net/url"
+	"strconv"
+)
 
-func (in *ApiError) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+func (obj *MyApi) Unpack(params url.Values) error {
+
+	// nextID
+	nextIDRaw, err := strconv.Atoi(params.Get("nextID"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid nextID - must be int")}
+	}
+	obj.nextID = uint64(nextIDRaw)
+
 	return nil
 }
 
-func (in *MyApi) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+func (obj *ProfileParams) Unpack(params url.Values) error {
+
+	// Login
+	LoginRaw := params.Get("Login")
+	obj.Login = LoginRaw
+
 	return nil
 }
 
-func (in *ProfileParams) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+func (obj *CreateParams) Unpack(params url.Values) error {
+
+	// Login
+	LoginRaw := params.Get("Login")
+	obj.Login = LoginRaw
+
+	// Name
+	NameRaw := params.Get("Name")
+	obj.Name = NameRaw
+
+	// Status
+	StatusRaw := params.Get("Status")
+	obj.Status = StatusRaw
+
+	// Age
+	AgeRaw, err := strconv.Atoi(params.Get("Age"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be int")}
+	}
+	obj.Age = AgeRaw
+
 	return nil
 }
 
-func (in *CreateParams) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+func (obj *User) Unpack(params url.Values) error {
+
+	// ID
+	IDRaw, err := strconv.Atoi(params.Get("ID"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be int")}
+	}
+	obj.ID = uint64(IDRaw)
+
+	// Login
+	LoginRaw := params.Get("Login")
+	obj.Login = LoginRaw
+
+	// FullName
+	FullNameRaw := params.Get("FullName")
+	obj.FullName = FullNameRaw
+
+	// Status
+	StatusRaw, err := strconv.Atoi(params.Get("Status"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Status - must be int")}
+	}
+	obj.Status = StatusRaw
+
 	return nil
 }
 
-func (in *User) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+func (obj *NewUser) Unpack(params url.Values) error {
+
+	// ID
+	IDRaw, err := strconv.Atoi(params.Get("ID"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be int")}
+	}
+	obj.ID = uint64(IDRaw)
+
 	return nil
 }
 
-func (in *NewUser) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+func (obj *OtherApi) Unpack(params url.Values) error {
+
 	return nil
 }
 
-func (in *OtherApi) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+func (obj *OtherCreateParams) Unpack(params url.Values) error {
+
+	// Username
+	UsernameRaw := params.Get("Username")
+	obj.Username = UsernameRaw
+
+	// Name
+	NameRaw := params.Get("Name")
+	obj.Name = NameRaw
+
+	// Class
+	ClassRaw := params.Get("Class")
+	obj.Class = ClassRaw
+
+	// Level
+	LevelRaw, err := strconv.Atoi(params.Get("Level"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be int")}
+	}
+	obj.Level = LevelRaw
+
 	return nil
 }
 
-func (in *OtherCreateParams) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
-	return nil
-}
+func (obj *OtherUser) Unpack(params url.Values) error {
 
-func (in *OtherUser) Unpack(data []byte) error {
-	r := bytes.NewReader(data)
+	// ID
+	IDRaw, err := strconv.Atoi(params.Get("ID"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be int")}
+	}
+	obj.ID = uint64(IDRaw)
+
+	// Login
+	LoginRaw := params.Get("Login")
+	obj.Login = LoginRaw
+
+	// FullName
+	FullNameRaw := params.Get("FullName")
+	obj.FullName = FullNameRaw
+
+	// Level
+	LevelRaw, err := strconv.Atoi(params.Get("Level"))
+	if err != nil {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be int")}
+	}
+	obj.Level = LevelRaw
+
 	return nil
 }
