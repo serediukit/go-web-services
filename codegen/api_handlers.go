@@ -10,7 +10,7 @@ import (
 func (obj *MyApi) Unpack(params url.Values) error {
 
 	// nextID
-	nextIDRaw, err := strconv.ParseUint(params.Get("nextID"), 10, 64)
+	nextIDRaw, err := strconv.ParseUint(params.Get("nextid"), 10, 64)
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid nextID - must be uint64")}
 	}
@@ -22,7 +22,7 @@ func (obj *MyApi) Unpack(params url.Values) error {
 func (obj *ProfileParams) Unpack(params url.Values) error {
 
 	// Login
-	LoginRaw := params.Get("Login")
+	LoginRaw := params.Get("login")
 	obj.Login = LoginRaw
 
 	return nil
@@ -31,19 +31,19 @@ func (obj *ProfileParams) Unpack(params url.Values) error {
 func (obj *CreateParams) Unpack(params url.Values) error {
 
 	// Login
-	LoginRaw := params.Get("Login")
+	LoginRaw := params.Get("login")
 	obj.Login = LoginRaw
 
 	// Name
-	NameRaw := params.Get("Name")
+	NameRaw := params.Get("full_name")
 	obj.Name = NameRaw
 
 	// Status
-	StatusRaw := params.Get("Status")
+	StatusRaw := params.Get("status")
 	obj.Status = StatusRaw
 
 	// Age
-	AgeRaw, err := strconv.Atoi(params.Get("Age"))
+	AgeRaw, err := strconv.Atoi(params.Get("age"))
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be int")}
 	}
@@ -55,22 +55,14 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 func (obj *User) Unpack(params url.Values) error {
 
 	// ID
-	IDRaw, err := strconv.ParseUint(params.Get("ID"), 10, 64)
+	IDRaw, err := strconv.ParseUint(params.Get("id"), 10, 64)
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
 	}
 	obj.ID = IDRaw
 
-	// Login
-	LoginRaw := params.Get("Login")
-	obj.Login = LoginRaw
-
-	// FullName
-	FullNameRaw := params.Get("FullName")
-	obj.FullName = FullNameRaw
-
 	// Status
-	StatusRaw, err := strconv.Atoi(params.Get("Status"))
+	StatusRaw, err := strconv.Atoi(params.Get("status"))
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Status - must be int")}
 	}
@@ -82,7 +74,7 @@ func (obj *User) Unpack(params url.Values) error {
 func (obj *NewUser) Unpack(params url.Values) error {
 
 	// ID
-	IDRaw, err := strconv.ParseUint(params.Get("ID"), 10, 64)
+	IDRaw, err := strconv.ParseUint(params.Get("id"), 10, 64)
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
 	}
@@ -99,19 +91,19 @@ func (obj *OtherApi) Unpack(params url.Values) error {
 func (obj *OtherCreateParams) Unpack(params url.Values) error {
 
 	// Username
-	UsernameRaw := params.Get("Username")
+	UsernameRaw := params.Get("username")
 	obj.Username = UsernameRaw
 
 	// Name
-	NameRaw := params.Get("Name")
+	NameRaw := params.Get("account_name")
 	obj.Name = NameRaw
 
 	// Class
-	ClassRaw := params.Get("Class")
+	ClassRaw := params.Get("class")
 	obj.Class = ClassRaw
 
 	// Level
-	LevelRaw, err := strconv.Atoi(params.Get("Level"))
+	LevelRaw, err := strconv.Atoi(params.Get("level"))
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be int")}
 	}
@@ -123,22 +115,14 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 func (obj *OtherUser) Unpack(params url.Values) error {
 
 	// ID
-	IDRaw, err := strconv.ParseUint(params.Get("ID"), 10, 64)
+	IDRaw, err := strconv.ParseUint(params.Get("id"), 10, 64)
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
 	}
 	obj.ID = IDRaw
 
-	// Login
-	LoginRaw := params.Get("Login")
-	obj.Login = LoginRaw
-
-	// FullName
-	FullNameRaw := params.Get("FullName")
-	obj.FullName = FullNameRaw
-
 	// Level
-	LevelRaw, err := strconv.Atoi(params.Get("Level"))
+	LevelRaw, err := strconv.Atoi(params.Get("level"))
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be int")}
 	}

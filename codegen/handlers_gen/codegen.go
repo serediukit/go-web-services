@@ -7,17 +7,31 @@ import (
 	"go/token"
 	"log"
 	"os"
+	"reflect"
+	"strconv"
+	"strings"
 	"text/template"
 )
 
 type tpl struct {
-	FieldName string
+	FieldName        string
+	RequestFieldName string
+}
+
+type ValidatorRules struct {
+	IsRequired bool
+	ParamName  string
+	Enum       []string
+	Default    string
+	HasDefault bool
+	Min        int
+	Max        int
 }
 
 var (
 	intTpl = template.Must(template.New("intTpl").Parse(`
 	// {{.FieldName}}
-	{{.FieldName}}Raw, err := strconv.Atoi(params.Get("{{.FieldName}}"))
+	{{.FieldName}}Raw, err := strconv.Atoi(params.Get("{{.RequestFieldName}}"))
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be int")}
 	}
@@ -26,7 +40,7 @@ var (
 
 	uint64Tpl = template.Must(template.New("int64Tpl").Parse(`
 	// {{.FieldName}}
-	{{.FieldName}}Raw, err := strconv.ParseUint(params.Get("{{.FieldName}}"), 10, 64)
+	{{.FieldName}}Raw, err := strconv.ParseUint(params.Get("{{.RequestFieldName}}"), 10, 64)
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be uint64")}
 	}
@@ -35,7 +49,7 @@ var (
 
 	strTpl = template.Must(template.New("strTpl").Parse(`
 	// {{.FieldName}}
-	{{.FieldName}}Raw := params.Get("{{.FieldName}}")
+	{{.FieldName}}Raw := params.Get("{{.RequestFieldName}}")
 	obj.{{.FieldName}} = {{.FieldName}}Raw
 `))
 )
@@ -90,6 +104,8 @@ func main() {
 				fmt.Fprintln(out, "func (obj *"+currType.Name.Name+") Unpack(params url.Values) error {")
 				//fmt.Fprintln(out, "	r := bytes.NewReader(data)")
 
+				fieldsToValidate := make(map[string]*ValidatorRules)
+
 				//FIELDS_LOOP:
 				for _, field := range currStruct.Fields.List {
 					fieldName := field.Names[0].Name
@@ -101,25 +117,64 @@ func main() {
 
 					fieldType := fieldIdent.Name
 
+					if field.Tag != nil {
+						tag := reflect.StructTag(field.Tag.Value[1 : len(field.Tag.Value)-1])
+
+						if res, ok := tag.Lookup("apivalidator"); ok {
+							rules := &ValidatorRules{}
+
+							tags := strings.Split(res, ",")
+
+							for _, t := range tags {
+								if t == "required" {
+									rules.IsRequired = true
+								} else {
+									parts := strings.Split(t, "=")
+									if len(parts) == 2 {
+										switch parts[0] {
+										case "paramname":
+											rules.ParamName = parts[1]
+										case "enum":
+											rules.Enum = strings.Split(parts[1], "|")
+										case "default":
+											rules.Default = parts[1]
+											rules.HasDefault = true
+										case "min":
+											rules.Min, _ = strconv.Atoi(parts[1])
+										case "max":
+											rules.Max, _ = strconv.Atoi(parts[1])
+										}
+									}
+								}
+							}
+
+							fieldsToValidate[fieldName] = rules
+							fmt.Println(rules)
+						}
+					}
+
 					fmt.Printf("\tgenerating code for field %s.%s\n", currType.Name.Name, fieldName)
+
+					lowerFieldName := strings.ToLower(fieldName)
 
 					switch fieldType {
 					case "int":
-						intTpl.Execute(out, tpl{fieldName})
+						intTpl.Execute(out, tpl{fieldName, lowerFieldName})
 					case "uint64":
-						uint64Tpl.Execute(out, tpl{fieldName})
+						uint64Tpl.Execute(out, tpl{fieldName, lowerFieldName})
 					case "string":
-						strTpl.Execute(out, tpl{fieldName})
+						if validatorRules, ok := fieldsToValidate[fieldName]; ok {
+							if validatorRules.ParamName != "" {
+								strTpl.Execute(out, tpl{fieldName, strings.ToLower(validatorRules.ParamName)})
+							} else {
+								strTpl.Execute(out, tpl{fieldName, lowerFieldName})
+							}
+						}
 					case "error":
 						continue
 					default:
 						log.Fatalln("unsupported", fieldType)
 					}
-
-					//
-					//if field.Tag != nil {
-					//	tags := reflect.StructTag(field.Tag.Value[1 : len(field.Tag.Value)-1])
-					//}
 				}
 
 				fmt.Fprintln(out)
