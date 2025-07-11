@@ -9,12 +9,10 @@ import (
 
 func (obj *MyApi) Unpack(params url.Values) error {
 
-	// nextID
-	nextIDRaw, err := strconv.ParseUint(params.Get("nextid"), 10, 64)
-	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid nextID - must be uint64")}
-	}
-	obj.nextID = nextIDRaw
+	return nil
+}
+
+func (obj *MyApi) Validate() error {
 
 	return nil
 }
@@ -24,6 +22,16 @@ func (obj *ProfileParams) Unpack(params url.Values) error {
 	// Login
 	LoginRaw := params.Get("login")
 	obj.Login = LoginRaw
+
+	return nil
+}
+
+func (obj *ProfileParams) Validate() error {
+
+	// required
+	if Login == "" {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
+	}
 
 	return nil
 }
@@ -52,38 +60,42 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 	return nil
 }
 
+func (obj *CreateParams) Validate() error {
+
+	// required
+	if Login == "" {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
+	}
+
+	return nil
+}
+
 func (obj *User) Unpack(params url.Values) error {
 
-	// ID
-	IDRaw, err := strconv.ParseUint(params.Get("id"), 10, 64)
-	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
-	}
-	obj.ID = IDRaw
+	return nil
+}
 
-	// Status
-	StatusRaw, err := strconv.Atoi(params.Get("status"))
-	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Status - must be int")}
-	}
-	obj.Status = StatusRaw
+func (obj *User) Validate() error {
 
 	return nil
 }
 
 func (obj *NewUser) Unpack(params url.Values) error {
 
-	// ID
-	IDRaw, err := strconv.ParseUint(params.Get("id"), 10, 64)
-	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
-	}
-	obj.ID = IDRaw
+	return nil
+}
+
+func (obj *NewUser) Validate() error {
 
 	return nil
 }
 
 func (obj *OtherApi) Unpack(params url.Values) error {
+
+	return nil
+}
+
+func (obj *OtherApi) Validate() error {
 
 	return nil
 }
@@ -112,21 +124,22 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 	return nil
 }
 
+func (obj *OtherCreateParams) Validate() error {
+
+	// required
+	if Username == "" {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Username - field is required")}
+	}
+
+	return nil
+}
+
 func (obj *OtherUser) Unpack(params url.Values) error {
 
-	// ID
-	IDRaw, err := strconv.ParseUint(params.Get("id"), 10, 64)
-	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid ID - must be uint64")}
-	}
-	obj.ID = IDRaw
+	return nil
+}
 
-	// Level
-	LevelRaw, err := strconv.Atoi(params.Get("level"))
-	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be int")}
-	}
-	obj.Level = LevelRaw
+func (obj *OtherUser) Validate() error {
 
 	return nil
 }

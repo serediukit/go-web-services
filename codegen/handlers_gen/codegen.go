@@ -19,6 +19,7 @@ type tpl struct {
 }
 
 type ValidatorRules struct {
+	FieldType  string
 	IsRequired bool
 	ParamName  string
 	Enum       []string
@@ -28,31 +29,62 @@ type ValidatorRules struct {
 	Max        int
 }
 
-var (
-	intTpl = template.Must(template.New("intTpl").Parse(`
+type Templates struct {
+	tpl         *template.Template
+	requiredTpl *template.Template
+	enumTpl     *template.Template
+	defaultTpl  *template.Template
+	minTpl      *template.Template
+	maxTpl      *template.Template
+}
+
+var templates = map[string]*Templates{
+	"int": &Templates{
+		tpl: template.Must(template.New("intTpl").Parse(`
 	// {{.FieldName}}
 	{{.FieldName}}Raw, err := strconv.Atoi(params.Get("{{.RequestFieldName}}"))
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be int")}
 	}
 	obj.{{.FieldName}} = {{.FieldName}}Raw
-`))
-
-	uint64Tpl = template.Must(template.New("int64Tpl").Parse(`
+`)),
+		requiredTpl: template.Must(template.New("requiredIntTpl").Parse(`
+	// required
+	if {{.FieldName}} == 0 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
+	}
+	`)),
+	},
+	"uint64": &Templates{
+		tpl: template.Must(template.New("int64Tpl").Parse(`
 	// {{.FieldName}}
 	{{.FieldName}}Raw, err := strconv.ParseUint(params.Get("{{.RequestFieldName}}"), 10, 64)
 	if err != nil {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be uint64")}
 	}
 	obj.{{.FieldName}} = {{.FieldName}}Raw
-`))
-
-	strTpl = template.Must(template.New("strTpl").Parse(`
+`)),
+		requiredTpl: template.Must(template.New("requiredUint64Tpl").Parse(`
+	// required
+	if {{.FieldName}} == uint64(0) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
+	}
+	`)),
+	},
+	"string": &Templates{
+		tpl: template.Must(template.New("strTpl").Parse(`
 	// {{.FieldName}}
 	{{.FieldName}}Raw := params.Get("{{.RequestFieldName}}")
 	obj.{{.FieldName}} = {{.FieldName}}Raw
-`))
-)
+`)),
+		requiredTpl: template.Must(template.New("requiredStringTpl").Parse(`
+	// required
+	if {{.FieldName}} == "" {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
+	}
+	`)),
+	},
+}
 
 func main() {
 	fset := token.NewFileSet()
@@ -102,7 +134,6 @@ func main() {
 				fmt.Printf("\tgenerating Unpack method\n")
 
 				fmt.Fprintln(out, "func (obj *"+currType.Name.Name+") Unpack(params url.Values) error {")
-				//fmt.Fprintln(out, "	r := bytes.NewReader(data)")
 
 				fieldsToValidate := make(map[string]*ValidatorRules)
 
@@ -121,7 +152,7 @@ func main() {
 						tag := reflect.StructTag(field.Tag.Value[1 : len(field.Tag.Value)-1])
 
 						if res, ok := tag.Lookup("apivalidator"); ok {
-							rules := &ValidatorRules{}
+							rules := &ValidatorRules{FieldType: fieldType}
 
 							tags := strings.Split(res, ",")
 
@@ -159,21 +190,41 @@ func main() {
 
 					switch fieldType {
 					case "int":
-						intTpl.Execute(out, tpl{fieldName, lowerFieldName})
+						fallthrough
 					case "uint64":
-						uint64Tpl.Execute(out, tpl{fieldName, lowerFieldName})
+						fallthrough
 					case "string":
 						if validatorRules, ok := fieldsToValidate[fieldName]; ok {
 							if validatorRules.ParamName != "" {
-								strTpl.Execute(out, tpl{fieldName, strings.ToLower(validatorRules.ParamName)})
+								templates[fieldType].tpl.Execute(out, tpl{fieldName, strings.ToLower(validatorRules.ParamName)})
 							} else {
-								strTpl.Execute(out, tpl{fieldName, lowerFieldName})
+								templates[fieldType].tpl.Execute(out, tpl{fieldName, lowerFieldName})
 							}
 						}
-					case "error":
-						continue
 					default:
 						log.Fatalln("unsupported", fieldType)
+					}
+				}
+
+				fmt.Fprintln(out)
+				fmt.Fprintln(out, "	return nil")
+				fmt.Fprintln(out, "}")
+				fmt.Fprintln(out)
+
+				fmt.Fprintln(out, "func (obj *"+currType.Name.Name+") Validate() error {")
+
+				for fieldName, validatorRules := range fieldsToValidate {
+					switch validatorRules.FieldType {
+					case "int":
+						fallthrough
+					case "uint64":
+						fallthrough
+					case "string":
+						if validatorRules.IsRequired {
+							templates[validatorRules.FieldType].requiredTpl.Execute(out, tpl{FieldName: fieldName})
+						}
+					default:
+						log.Fatalln("unsupported", validatorRules.FieldType)
 					}
 				}
 
