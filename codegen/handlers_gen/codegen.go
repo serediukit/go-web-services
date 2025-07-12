@@ -23,6 +23,11 @@ type enumTpl struct {
 	EnumFields string
 }
 
+type funcTpl struct {
+	ApiName  string
+	FuncName string
+}
+
 type ValidatorRules struct {
 	FieldType  string
 	IsRequired bool
@@ -167,6 +172,10 @@ var templates = map[string]*Templates{
 	},
 }
 
+var funcHeaderTpl = template.Must(template.New("funcHeaderTpl").Parse(`
+func (h *{{.ParentName}}) wraper{{.FuncName}}(w http.ResponseWriter, r *http.Request) {
+`))
+
 func main() {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, os.Args[1], nil, parser.ParseComments)
@@ -190,7 +199,23 @@ func main() {
 	for _, f := range node.Decls {
 		switch f.(type) {
 		case *ast.FuncDecl:
-			// fmt.Printf("%+v is *ast.FuncDecl\n", f)
+			g, _ := f.(*ast.FuncDecl)
+			needCodegen := false
+			if g.Doc != nil {
+				for _, comment := range g.Doc.List {
+					needCodegen = needCodegen || strings.HasPrefix(comment.Text, "// apigen:api")
+				}
+				if !needCodegen {
+					fmt.Printf("SKIP struct %#v doesnt have cgen mark\n", g.Name.Name)
+					continue
+				}
+
+				fmt.Printf("%+v\n", g.Body)
+
+				// funcHeaderTpl.Execute(out, funcTpl{ApiName: g., FuncName: g.Name})
+				// fmt.Fprintln(out, "}")
+			}
+
 		case *ast.GenDecl:
 			g, _ := f.(*ast.GenDecl)
 			// SPECS_LOOP:
@@ -264,8 +289,6 @@ func main() {
 							if rules.HasValues() {
 								fieldsToValidate[fieldName] = rules
 							}
-
-							fmt.Println(rules)
 						}
 					}
 
