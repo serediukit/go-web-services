@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/url"
+	"slices"
 	"strconv"
 )
 
@@ -29,7 +30,7 @@ func (obj *ProfileParams) Unpack(params url.Values) error {
 func (obj *ProfileParams) Validate() error {
 
 	// required
-	if Login == "" {
+	if obj.Login == "" {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
 	}
 
@@ -41,10 +42,6 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 	// Login
 	LoginRaw := params.Get("login")
 	obj.Login = LoginRaw
-
-	// Name
-	NameRaw := params.Get("full_name")
-	obj.Name = NameRaw
 
 	// Status
 	StatusRaw := params.Get("status")
@@ -63,8 +60,13 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 func (obj *CreateParams) Validate() error {
 
 	// required
-	if Login == "" {
+	if obj.Login == "" {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
+	}
+
+	// enum
+	if !slices.Contains([]string{"user", "moderator", "admin"}, obj.Status) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Status - must be in enum")}
 	}
 
 	return nil
@@ -106,10 +108,6 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 	UsernameRaw := params.Get("username")
 	obj.Username = UsernameRaw
 
-	// Name
-	NameRaw := params.Get("account_name")
-	obj.Name = NameRaw
-
 	// Class
 	ClassRaw := params.Get("class")
 	obj.Class = ClassRaw
@@ -127,8 +125,13 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 func (obj *OtherCreateParams) Validate() error {
 
 	// required
-	if Username == "" {
+	if obj.Username == "" {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Username - field is required")}
+	}
+
+	// enum
+	if !slices.Contains([]string{"warrior", "sorcerer", "rouge"}, obj.Class) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Class - must be in enum")}
 	}
 
 	return nil

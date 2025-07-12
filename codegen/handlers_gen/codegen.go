@@ -18,6 +18,11 @@ type tpl struct {
 	RequestFieldName string
 }
 
+type enumTpl struct {
+	FieldName  string
+	EnumFields string
+}
+
 type ValidatorRules struct {
 	FieldType  string
 	IsRequired bool
@@ -27,6 +32,10 @@ type ValidatorRules struct {
 	HasDefault bool
 	Min        int
 	Max        int
+}
+
+func (vr ValidatorRules) HasValues() bool {
+	return vr.IsRequired || len(vr.Enum) > 0 || vr.HasDefault || vr.Min > 0 || vr.Max > 0
 }
 
 type Templates struct {
@@ -50,10 +59,16 @@ var templates = map[string]*Templates{
 `)),
 		requiredTpl: template.Must(template.New("requiredIntTpl").Parse(`
 	// required
-	if {{.FieldName}} == 0 {
+	if obj.{{.FieldName}} == 0 {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
 	}
 	`)),
+		enumTpl: template.Must(template.New("enumTpl").Parse(`
+	// enum
+	if !slices.Contains([]string{{"{"}}{{.EnumFields}}{{"}"}}, strconv.Itoa(obj.{{.FieldName}})) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be in enum")}
+	}
+`)),
 	},
 	"uint64": &Templates{
 		tpl: template.Must(template.New("int64Tpl").Parse(`
@@ -66,10 +81,16 @@ var templates = map[string]*Templates{
 `)),
 		requiredTpl: template.Must(template.New("requiredUint64Tpl").Parse(`
 	// required
-	if {{.FieldName}} == uint64(0) {
+	if obj.{{.FieldName}} == uint64(0) {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
 	}
 	`)),
+		enumTpl: template.Must(template.New("enumTpl").Parse(`
+	// enum
+	if !slices.Contains([]string{{"{"}}{{.EnumFields}}{{"}"}}, strconv.Itoa(obj.{{.FieldName}})) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be in enum")}
+	}
+`)),
 	},
 	"string": &Templates{
 		tpl: template.Must(template.New("strTpl").Parse(`
@@ -79,10 +100,16 @@ var templates = map[string]*Templates{
 `)),
 		requiredTpl: template.Must(template.New("requiredStringTpl").Parse(`
 	// required
-	if {{.FieldName}} == "" {
+	if obj.{{.FieldName}} == "" {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
 	}
 	`)),
+		enumTpl: template.Must(template.New("enumTpl").Parse(`
+	// enum
+	if !slices.Contains([]string{{"{"}}{{.EnumFields}}{{"}"}}, obj.{{.FieldName}}) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be in enum")}
+	}
+`)),
 	},
 }
 
@@ -102,16 +129,17 @@ func main() {
 	"net/http"
 	"net/url"
 	"strconv"
+	"slices"
 )`)
 	fmt.Fprintln(out)
 
 	for _, f := range node.Decls {
 		switch f.(type) {
 		case *ast.FuncDecl:
-			//fmt.Printf("%+v is *ast.FuncDecl\n", f)
+			// fmt.Printf("%+v is *ast.FuncDecl\n", f)
 		case *ast.GenDecl:
 			g, _ := f.(*ast.GenDecl)
-			//SPECS_LOOP:
+			// SPECS_LOOP:
 			for _, spec := range g.Specs {
 				currType, ok := spec.(*ast.TypeSpec)
 				if !ok {
@@ -137,7 +165,7 @@ func main() {
 
 				fieldsToValidate := make(map[string]*ValidatorRules)
 
-				//FIELDS_LOOP:
+				// FIELDS_LOOP:
 				for _, field := range currStruct.Fields.List {
 					fieldName := field.Names[0].Name
 					fieldIdent, ok := field.Type.(*ast.Ident)
@@ -179,7 +207,10 @@ func main() {
 								}
 							}
 
-							fieldsToValidate[fieldName] = rules
+							if rules.HasValues() {
+								fieldsToValidate[fieldName] = rules
+							}
+
 							fmt.Println(rules)
 						}
 					}
@@ -222,6 +253,15 @@ func main() {
 					case "string":
 						if validatorRules.IsRequired {
 							templates[validatorRules.FieldType].requiredTpl.Execute(out, tpl{FieldName: fieldName})
+						}
+						if len(validatorRules.Enum) > 0 {
+							q := make([]string, len(validatorRules.Enum))
+							for i, v := range validatorRules.Enum {
+								q[i] = `"` + v + `"`
+							}
+							resEnum := strings.Join(q, ", ")
+
+							templates[validatorRules.FieldType].enumTpl.Execute(out, enumTpl{FieldName: fieldName, EnumFields: resEnum})
 						}
 					default:
 						log.Fatalln("unsupported", validatorRules.FieldType)
