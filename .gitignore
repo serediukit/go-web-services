@@ -1,1 +1,6 @@
 /codegen/codegen.exe
+/.idea/.gitignore
+/.idea/go-web-services.iml
+/codegen/handlers_gen.exe
+/.idea/modules.xml
+/.idea/vcs.xml
