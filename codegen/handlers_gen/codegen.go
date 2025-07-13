@@ -204,6 +204,13 @@ func (h {{.ReceiverName}}) wrapper{{.FuncName}}(w http.ResponseWriter, r *http.R
 `))
 )
 
+type ApiMethod struct {
+	Url    string
+	Method string
+}
+
+type ApiStruct []ApiMethod
+
 func main() {
 	fset := token.NewFileSet()
 	node, err := parser.ParseFile(fset, os.Args[1], nil, parser.ParseComments)
@@ -223,6 +230,8 @@ func main() {
 	"slices"
 )`)
 	fmt.Fprintln(out)
+
+	apisRoutes := make(map[string]ApiStruct)
 
 	for _, f := range node.Decls {
 		switch f.(type) {
@@ -257,6 +266,8 @@ func main() {
 				if err = json.Unmarshal([]byte(jsonData), apiData); err != nil {
 					fmt.Printf("SKIP func %#v has invalid json data\n", g.Name.Name)
 				}
+
+				apisRoutes[receiverType] = append(apisRoutes[receiverType], ApiMethod{Url: apiData.Url, Method: g.Name.Name})
 
 				if apiData.Auth {
 					fmt.Fprintln(out, "\tif r.Header.Get(\"X-Auth\") != \"100500\" {")
@@ -451,5 +462,51 @@ func main() {
 		default:
 			fmt.Printf("SKIP %#T is not *ast.GenDecl or *ast.FuncDecl\n", f)
 		}
+	}
+
+	for apiName, apiStruct := range apisRoutes {
+		fmt.Fprintf(out, "func (h %s) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n", apiName)
+
+		fmt.Fprintln(out, "\tvar (")
+		fmt.Fprintln(out, "\t\terr error")
+		fmt.Fprintln(out, "\t\tres interface{}")
+		fmt.Fprintln(out, "\t)")
+		fmt.Fprintln(out)
+
+		fmt.Fprintln(out, "\tswitch r.URL.Path {")
+		for _, apiMethod := range apiStruct {
+			fmt.Fprintf(out, "\tcase \"%s\":\n", apiMethod.Url)
+			fmt.Fprintf(out, "\t\tres, err = h.wrapper%s(w, r)\n", apiMethod.Method)
+		}
+		fmt.Fprintln(out, "\tdefault:")
+		fmt.Fprintln(out, "\t\terr = ApiError{http.StatusNotFound, fmt.Errorf(\"unknown method\")}")
+		fmt.Fprintln(out, "\t}")
+		fmt.Fprintln(out)
+
+		fmt.Fprintln(out, "\tvar response = struct {")
+		fmt.Fprintln(out, "\t\tData interface{}")
+		fmt.Fprintln(out, "\t\tErr error")
+		fmt.Fprintln(out, "\t}{}")
+		fmt.Fprintln(out)
+
+		fmt.Fprintln(out, "\tif err == nil {")
+		fmt.Fprintln(out, "\t\tresponse.Data = res")
+		fmt.Fprintln(out, "\t} else {")
+		fmt.Fprintln(out, "\t\tresponse.Err = err")
+		fmt.Fprintln(out)
+		fmt.Fprintln(out, "\t\tif errApi, ok := err.(ApiError); ok {")
+		fmt.Fprintln(out, "\t\t\tw.WriteHeader(errApi.HTTPStatus)")
+		fmt.Fprintln(out, "\t\t} else {")
+		fmt.Fprintln(out, "\t\t\tw.WriteHeader(http.StatusInternalServerError)")
+		fmt.Fprintln(out, "\t\t}")
+		fmt.Fprintln(out, "\t}")
+		fmt.Fprintln(out)
+
+		fmt.Fprintln(out, "\tresponseJson, _ := json.Marshal(response)")
+		fmt.Fprintln(out, "\tw.Header().Set(\"Content-Type\", \"application/json\")")
+		fmt.Fprintln(out, "\tw.Write(responseJson)")
+
+		fmt.Fprintln(out, "}")
+		fmt.Fprintln(out)
 	}
 }

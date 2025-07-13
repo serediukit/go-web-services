@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -59,11 +60,6 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 
 func (obj *CreateParams) Validate() error {
 
-	// Age max
-	if obj.Age > 128 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
-	}
-
 	// Login required
 	if obj.Login == "" {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
@@ -82,6 +78,11 @@ func (obj *CreateParams) Validate() error {
 	// Status default
 	if obj.Status == "" {
 		obj.Status = "user"
+	}
+
+	// Age max
+	if obj.Age > 128 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
 	}
 
 	return nil
@@ -274,4 +275,76 @@ func (h *OtherApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interf
 	}
 
 	return h.Create(r.Context(), in)
+}
+
+func (h *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var (
+		err error
+		res interface{}
+	)
+
+	switch r.URL.Path {
+	case "/user/profile":
+		res, err = h.wrapperProfile(w, r)
+	case "/user/create":
+		res, err = h.wrapperCreate(w, r)
+	default:
+		err = ApiError{http.StatusNotFound, fmt.Errorf("unknown method")}
+	}
+
+	var response = struct {
+		Data interface{}
+		Err  error
+	}{}
+
+	if err == nil {
+		response.Data = res
+	} else {
+		response.Err = err
+
+		if errApi, ok := err.(ApiError); ok {
+			w.WriteHeader(errApi.HTTPStatus)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+
+	responseJson, _ := json.Marshal(response)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(responseJson)
+}
+
+func (h *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var (
+		err error
+		res interface{}
+	)
+
+	switch r.URL.Path {
+	case "/user/create":
+		res, err = h.wrapperCreate(w, r)
+	default:
+		err = ApiError{http.StatusNotFound, fmt.Errorf("unknown method")}
+	}
+
+	var response = struct {
+		Data interface{}
+		Err  error
+	}{}
+
+	if err == nil {
+		response.Data = res
+	} else {
+		response.Err = err
+
+		if errApi, ok := err.(ApiError); ok {
+			w.WriteHeader(errApi.HTTPStatus)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+
+	responseJson, _ := json.Marshal(response)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(responseJson)
 }
