@@ -59,16 +59,6 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 
 func (obj *CreateParams) Validate() error {
 
-	// Login required
-	if obj.Login == "" {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
-	}
-
-	// Login min
-	if len(obj.Login) < 10 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - len must be more than min")}
-	}
-
 	// Status enum
 	if !slices.Contains([]string{"user", "moderator", "admin"}, obj.Status) {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Status - must be in enum")}
@@ -82,6 +72,16 @@ func (obj *CreateParams) Validate() error {
 	// Age max
 	if obj.Age > 128 {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
+	}
+
+	// Login required
+	if obj.Login == "" {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
+	}
+
+	// Login min
+	if len(obj.Login) < 10 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - len must be more than min")}
 	}
 
 	return nil
@@ -107,6 +107,15 @@ func (obj *NewUser) Validate() error {
 	return nil
 }
 
+func (h *MyApi) wrapperProfile(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+}
+
+func (h *MyApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	if r.Header.Get("X-Auth") != "100500" {
+		return nil, ApiError{http.StatusUnauthorized, fmt.Errorf("unauthorized")}
+	}
+
+}
 func (obj *OtherApi) Unpack(params url.Values) error {
 
 	return nil
@@ -180,4 +189,11 @@ func (obj *OtherUser) Unpack(params url.Values) error {
 func (obj *OtherUser) Validate() error {
 
 	return nil
+}
+
+func (h *OtherApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	if r.Header.Get("X-Auth") != "100500" {
+		return nil, ApiError{http.StatusUnauthorized, fmt.Errorf("unauthorized")}
+	}
+
 }

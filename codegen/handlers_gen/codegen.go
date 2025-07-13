@@ -1,6 +1,7 @@
 package main
 
 import (
+	"encoding/json"
 	"fmt"
 	"go/ast"
 	"go/parser"
@@ -24,8 +25,8 @@ type enumTpl struct {
 }
 
 type funcTpl struct {
-	ApiName  string
-	FuncName string
+	ReceiverName string
+	FuncName     string
 }
 
 type ValidatorRules struct {
@@ -50,6 +51,12 @@ type Templates struct {
 	defaultTpl  *template.Template
 	minTpl      *template.Template
 	maxTpl      *template.Template
+}
+
+type ApiMethodsJson struct {
+	Url    string
+	Auth   bool
+	Method string
 }
 
 var templates = map[string]*Templates{
@@ -173,7 +180,7 @@ var templates = map[string]*Templates{
 }
 
 var funcHeaderTpl = template.Must(template.New("funcHeaderTpl").Parse(`
-func (h *{{.ParentName}}) wraper{{.FuncName}}(w http.ResponseWriter, r *http.Request) {
+func (h {{.ReceiverName}}) wrapper{{.FuncName}}(w http.ResponseWriter, r *http.Request) (interface{{"{}"}}, error) {{"{"}}
 `))
 
 func main() {
@@ -202,18 +209,41 @@ func main() {
 			g, _ := f.(*ast.FuncDecl)
 			needCodegen := false
 			if g.Doc != nil {
-				for _, comment := range g.Doc.List {
+				var comment *ast.Comment
+				for _, comment = range g.Doc.List {
 					needCodegen = needCodegen || strings.HasPrefix(comment.Text, "// apigen:api")
 				}
 				if !needCodegen {
-					fmt.Printf("SKIP struct %#v doesnt have cgen mark\n", g.Name.Name)
+					fmt.Printf("SKIP func %#v doesnt have cgen mark\n", g.Name.Name)
 					continue
 				}
 
-				fmt.Printf("%+v\n", g.Body)
+				var receiverType string
+				switch expr := g.Recv.List[0].Type.(type) {
+				case *ast.StarExpr:
+					if ident, ok := expr.X.(*ast.Ident); ok {
+						receiverType = "*" + ident.Name
+					}
+				case *ast.Ident:
+					receiverType = expr.Name
+				default:
+				}
 
-				// funcHeaderTpl.Execute(out, funcTpl{ApiName: g., FuncName: g.Name})
-				// fmt.Fprintln(out, "}")
+				funcHeaderTpl.Execute(out, funcTpl{ReceiverName: receiverType, FuncName: g.Name.Name})
+
+				jsonData := comment.Text[13:]
+				apiData := &ApiMethodsJson{}
+				if err = json.Unmarshal([]byte(jsonData), apiData); err != nil {
+					fmt.Printf("SKIP func %#v has invalid json data\n", g.Name.Name)
+				}
+
+				if apiData.Auth {
+					fmt.Fprintln(out, "\tif r.Header.Get(\"X-Auth\") != \"100500\" {")
+					fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusUnauthorized, fmt.Errorf(\"unauthorized\")}")
+					fmt.Fprintln(out, "\t}\n")
+				}
+
+				fmt.Fprintln(out, "}")
 			}
 
 		case *ast.GenDecl:
