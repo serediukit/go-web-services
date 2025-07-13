@@ -59,6 +59,11 @@ type ApiMethodsJson struct {
 	Method string
 }
 
+type FuncInTpl struct {
+	StructInName string
+	FuncName     string
+}
+
 var templates = map[string]*Templates{
 	"int": &Templates{
 		tpl: template.Must(template.New("intTpl").Parse(`
@@ -179,9 +184,25 @@ var templates = map[string]*Templates{
 	},
 }
 
-var funcHeaderTpl = template.Must(template.New("funcHeaderTpl").Parse(`
+var (
+	funcHeaderTpl = template.Must(template.New("funcHeaderTpl").Parse(`
 func (h {{.ReceiverName}}) wrapper{{.FuncName}}(w http.ResponseWriter, r *http.Request) (interface{{"{}"}}, error) {{"{"}}
 `))
+	funcParamsTpl = template.Must(template.New("inParamsTpl").Parse(`
+	in := {{.StructInName}}{}
+	err := in.Unpack(params)
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	err = in.Validate()
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	return h.{{.FuncName}}(r.Context(), in)
+`))
+)
 
 func main() {
 	fset := token.NewFileSet()
@@ -251,7 +272,37 @@ func main() {
 					fmt.Fprintln(out)
 				}
 
+				fmt.Fprintln(out, "\tvar params url.Values")
+				fmt.Fprintln(out, "\tif r.Method == \"GET\" {")
+				fmt.Fprintln(out, "\t\tparams = r.URL.Query()")
+				fmt.Fprintln(out, "\t} else {")
+				fmt.Fprintln(out, "\t\terr := r.ParseForm()")
+				fmt.Fprintln(out, "\t\tif err != nil {")
+				fmt.Fprintln(out, "\t\t\treturn nil, ApiError{http.StatusBadRequest, fmt.Errorf(\"invalid request\")}")
+				fmt.Fprintln(out, "\t\t}")
+				fmt.Fprintln(out, "\t\tparams = r.PostForm")
+				fmt.Fprintln(out, "\t}")
+
+				var typeStr string
+				switch t := g.Type.Params.List[1].Type.(type) {
+				case *ast.Ident:
+					typeStr = t.Name
+				case *ast.StarExpr:
+					if ident, ok := t.X.(*ast.Ident); ok {
+						typeStr = "*" + ident.Name
+					}
+				case *ast.SelectorExpr:
+					if pkg, ok := t.X.(*ast.Ident); ok {
+						typeStr = pkg.Name + "." + t.Sel.Name
+					}
+				default:
+					typeStr = fmt.Sprintf("%T", t) //
+				}
+
+				funcParamsTpl.Execute(out, FuncInTpl{StructInName: typeStr, FuncName: g.Name.Name})
+
 				fmt.Fprintln(out, "}")
+				fmt.Fprintln(out)
 			}
 
 		case *ast.GenDecl:

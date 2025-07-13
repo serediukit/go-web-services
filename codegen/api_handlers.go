@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"net/url"
 	"slices"
-	
+	"strconv"
 )
 
 func (obj *MyApi) Unpack(params url.Values) error {
@@ -59,6 +59,11 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 
 func (obj *CreateParams) Validate() error {
 
+	// Age max
+	if obj.Age > 128 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
+	}
+
 	// Login required
 	if obj.Login == "" {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
@@ -77,11 +82,6 @@ func (obj *CreateParams) Validate() error {
 	// Status default
 	if obj.Status == "" {
 		obj.Status = "user"
-	}
-
-	// Age max
-	if obj.Age > 128 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
 	}
 
 	return nil
@@ -108,6 +108,29 @@ func (obj *NewUser) Validate() error {
 }
 
 func (h *MyApi) wrapperProfile(w http.ResponseWriter, r *http.Request) (interface{}, error) {
+	var params url.Values
+	if r.Method == "GET" {
+		params = r.URL.Query()
+	} else {
+		err := r.ParseForm()
+		if err != nil {
+			return nil, ApiError{http.StatusBadRequest, fmt.Errorf("invalid request")}
+		}
+		params = r.PostForm
+	}
+
+	in := ProfileParams{}
+	err := in.Unpack(params)
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	err = in.Validate()
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	return h.Profile(r.Context(), in)
 }
 
 func (h *MyApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interface{}, error) {
@@ -119,7 +142,31 @@ func (h *MyApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interface
 		return nil, ApiError{http.StatusMethodNotAllowed, fmt.Errorf("method not allowed")}
 	}
 
+	var params url.Values
+	if r.Method == "GET" {
+		params = r.URL.Query()
+	} else {
+		err := r.ParseForm()
+		if err != nil {
+			return nil, ApiError{http.StatusBadRequest, fmt.Errorf("invalid request")}
+		}
+		params = r.PostForm
+	}
+
+	in := CreateParams{}
+	err := in.Unpack(params)
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	err = in.Validate()
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	return h.Create(r.Context(), in)
 }
+
 func (obj *OtherApi) Unpack(params url.Values) error {
 
 	return nil
@@ -204,4 +251,27 @@ func (h *OtherApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interf
 		return nil, ApiError{http.StatusMethodNotAllowed, fmt.Errorf("method not allowed")}
 	}
 
+	var params url.Values
+	if r.Method == "GET" {
+		params = r.URL.Query()
+	} else {
+		err := r.ParseForm()
+		if err != nil {
+			return nil, ApiError{http.StatusBadRequest, fmt.Errorf("invalid request")}
+		}
+		params = r.PostForm
+	}
+
+	in := OtherCreateParams{}
+	err := in.Unpack(params)
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	err = in.Validate()
+	if err != nil {
+		return nil, ApiError{http.StatusBadRequest, err}
+	}
+
+	return h.Create(r.Context(), in)
 }
