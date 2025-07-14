@@ -45,11 +45,13 @@ type ValidatorRules struct {
 	Default    string
 	HasDefault bool
 	Min        int
+	HasMin     bool
 	Max        int
+	HasMax     bool
 }
 
 func (vr ValidatorRules) HasValues() bool {
-	return vr.IsRequired || len(vr.ParamName) > 0 || len(vr.Enum) > 0 || vr.HasDefault || vr.Min > 0 || vr.Max > 0
+	return vr.IsRequired || len(vr.ParamName) > 0 || len(vr.Enum) > 0 || vr.HasDefault || vr.HasMin || vr.HasMax
 }
 
 type Templates struct {
@@ -389,8 +391,10 @@ func main() {
 											rules.HasDefault = true
 										case "min":
 											rules.Min, _ = strconv.Atoi(parts[1])
+											rules.HasMin = true
 										case "max":
 											rules.Max, _ = strconv.Atoi(parts[1])
+											rules.HasMax = true
 										}
 									}
 								}
@@ -451,10 +455,10 @@ func main() {
 						if validatorRules.HasDefault {
 							templates[validatorRules.FieldType].defaultTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: validatorRules.Default})
 						}
-						if validatorRules.Min > 0 {
+						if validatorRules.HasMin {
 							templates[validatorRules.FieldType].minTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Min)})
 						}
-						if validatorRules.Max > 0 {
+						if validatorRules.HasMax {
 							templates[validatorRules.FieldType].maxTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Max)})
 						}
 					default:
