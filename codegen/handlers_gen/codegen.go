@@ -279,14 +279,14 @@ func main() {
 
 				if apiData.Auth {
 					fmt.Fprintln(out, "\tif r.Header.Get(\"X-Auth\") != \"100500\" {")
-					fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusUnauthorized, fmt.Errorf(\"unauthorized\")}")
+					fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusForbidden, fmt.Errorf(\"unauthorized\")}")
 					fmt.Fprintln(out, "\t}")
 					fmt.Fprintln(out)
 				}
 
 				if apiData.Method != "" {
 					fmt.Fprintln(out, "\tif r.Method != \""+apiData.Method+"\" {")
-					fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusMethodNotAllowed, fmt.Errorf(\"method not allowed\")}")
+					fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusNotAcceptable, fmt.Errorf(\"bad method\")}")
 					fmt.Fprintln(out, "\t}")
 					fmt.Fprintln(out)
 				}

@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	"errors"
+	
 	"fmt"
 	"net/http"
 	"net/url"
@@ -141,11 +141,11 @@ func (h *MyApi) wrapperProfile(w http.ResponseWriter, r *http.Request) (interfac
 
 func (h *MyApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	if r.Header.Get("X-Auth") != "100500" {
-		return nil, ApiError{http.StatusUnauthorized, fmt.Errorf("unauthorized")}
+		return nil, ApiError{http.StatusForbidden, fmt.Errorf("unauthorized")}
 	}
 
 	if r.Method != "POST" {
-		return nil, ApiError{http.StatusMethodNotAllowed, fmt.Errorf("method not allowed")}
+		return nil, ApiError{http.StatusNotAcceptable, fmt.Errorf("bad method")}
 	}
 
 	var params url.Values
@@ -254,11 +254,11 @@ func (obj *OtherUser) Validate() error {
 
 func (h *OtherApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interface{}, error) {
 	if r.Header.Get("X-Auth") != "100500" {
-		return nil, ApiError{http.StatusUnauthorized, fmt.Errorf("unauthorized")}
+		return nil, ApiError{http.StatusForbidden, fmt.Errorf("unauthorized")}
 	}
 
 	if r.Method != "POST" {
-		return nil, ApiError{http.StatusMethodNotAllowed, fmt.Errorf("method not allowed")}
+		return nil, ApiError{http.StatusNotAcceptable, fmt.Errorf("bad method")}
 	}
 
 	var params url.Values
