@@ -24,6 +24,12 @@ type enumTpl struct {
 	EnumFields string
 }
 
+type minMaxTpl struct {
+	FieldName      string
+	LowerFieldName string
+	Length         string
+}
+
 type funcTpl struct {
 	ReceiverName string
 	FuncName     string
@@ -77,7 +83,7 @@ var templates = map[string]*Templates{
 		requiredTpl: template.Must(template.New("requiredIntTpl").Parse(`
 	// {{.FieldName}} required
 	if obj.{{.FieldName}} == 0 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.RequestFieldName}} must be not empty")}
 	}
 	`)),
 		enumTpl: template.Must(template.New("enumIntTpl").Parse(`
@@ -94,14 +100,14 @@ var templates = map[string]*Templates{
 `)),
 		minTpl: template.Must(template.New("minIntTpl").Parse(`
 	// {{.FieldName}} min
-	if obj.{{.FieldName}} < {{.RequestFieldName}} {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be more than min")}
+	if obj.{{.FieldName}} < {{.Length}} {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} must be >= {{.Length}}")}
 	}
 `)),
 		maxTpl: template.Must(template.New("maxIntTpl").Parse(`
 	// {{.FieldName}} max
-	if obj.{{.FieldName}} > {{.RequestFieldName}} {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be less than max")}
+	if obj.{{.FieldName}} > {{.Length}} {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} must be <= {{.Length}}")}
 	}
 `)),
 	},
@@ -117,7 +123,7 @@ var templates = map[string]*Templates{
 		requiredTpl: template.Must(template.New("requiredUint64Tpl").Parse(`
 	// {{.FieldName}} required
 	if obj.{{.FieldName}} == uint64(0) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.RequestFieldName}} must be not empty")}
 	}
 	`)),
 		enumTpl: template.Must(template.New("enumUint64Tpl").Parse(`
@@ -134,14 +140,14 @@ var templates = map[string]*Templates{
 `)),
 		minTpl: template.Must(template.New("minUint64Tpl").Parse(`
 	// {{.FieldName}} min
-	if obj.{{.FieldName}} < {{.RequestFieldName}} {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be more than min")}
+	if obj.{{.FieldName}} < {{.Length}} {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} must be >= {{.Length}}")}
 	}
 `)),
 		maxTpl: template.Must(template.New("maxUint64Tpl").Parse(`
 	// {{.FieldName}} max
-	if obj.{{.FieldName}} > {{.RequestFieldName}} {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be less than max")}
+	if obj.{{.FieldName}} > {{.Length}} {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} must be <= {{.Length}}")}
 	}
 `)),
 	},
@@ -154,7 +160,7 @@ var templates = map[string]*Templates{
 		requiredTpl: template.Must(template.New("requiredStringTpl").Parse(`
 	// {{.FieldName}} required
 	if obj.{{.FieldName}} == "" {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - field is required")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.RequestFieldName}} must be not empty")}
 	}
 	`)),
 		enumTpl: template.Must(template.New("enumStringTpl").Parse(`
@@ -171,14 +177,14 @@ var templates = map[string]*Templates{
 `)),
 		minTpl: template.Must(template.New("minStringTpl").Parse(`
 	// {{.FieldName}} min
-	if len(obj.{{.FieldName}}) < {{.RequestFieldName}} {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - len must be more than min")}
+	if len(obj.{{.FieldName}}) < {{.Length}} {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} len must be >= {{.Length}}")}
 	}
 `)),
 		maxTpl: template.Must(template.New("maxStringTpl").Parse(`
 	// {{.FieldName}} max
-	if len(obj.{{.FieldName}}) > {{.RequestFieldName}} {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - len must be less than max")}
+	if len(obj.{{.FieldName}}) > {{.Length}} {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} len must be <= {{.Length}}")}
 	}
 `)),
 	},
@@ -229,6 +235,7 @@ func main() {
 	"strconv"
 	"slices"
 	"encoding/json"
+	"errors"
 )`)
 	fmt.Fprintln(out)
 
@@ -430,7 +437,7 @@ func main() {
 						fallthrough
 					case "string":
 						if validatorRules.IsRequired {
-							templates[validatorRules.FieldType].requiredTpl.Execute(out, tpl{FieldName: fieldName})
+							templates[validatorRules.FieldType].requiredTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(fieldName)})
 						}
 						if len(validatorRules.Enum) > 0 {
 							q := make([]string, len(validatorRules.Enum))
@@ -445,10 +452,10 @@ func main() {
 							templates[validatorRules.FieldType].defaultTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: validatorRules.Default})
 						}
 						if validatorRules.Min > 0 {
-							templates[validatorRules.FieldType].minTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strconv.Itoa(validatorRules.Min)})
+							templates[validatorRules.FieldType].minTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Min)})
 						}
 						if validatorRules.Max > 0 {
-							templates[validatorRules.FieldType].maxTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strconv.Itoa(validatorRules.Max)})
+							templates[validatorRules.FieldType].maxTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Max)})
 						}
 					default:
 						log.Fatalln("unsupported", validatorRules.FieldType)

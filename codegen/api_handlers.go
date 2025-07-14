@@ -33,7 +33,7 @@ func (obj *ProfileParams) Validate() error {
 
 	// Login required
 	if obj.Login == "" {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("login must be not empty")}
 	}
 
 	return nil
@@ -65,19 +65,14 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 
 func (obj *CreateParams) Validate() error {
 
-	// Age max
-	if obj.Age > 128 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
-	}
-
 	// Login required
 	if obj.Login == "" {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - field is required")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("login must be not empty")}
 	}
 
 	// Login min
 	if len(obj.Login) < 10 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Login - len must be more than min")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("login len must be >= 10")}
 	}
 
 	// Status enum
@@ -88,6 +83,11 @@ func (obj *CreateParams) Validate() error {
 	// Status default
 	if obj.Status == "" {
 		obj.Status = "user"
+	}
+
+	// Age max
+	if obj.Age > 128 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("age must be <= 128")}
 	}
 
 	return nil
@@ -209,16 +209,6 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 
 func (obj *OtherCreateParams) Validate() error {
 
-	// Username required
-	if obj.Username == "" {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Username - field is required")}
-	}
-
-	// Username min
-	if len(obj.Username) < 3 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Username - len must be more than min")}
-	}
-
 	// Class enum
 	if !slices.Contains([]string{"warrior", "sorcerer", "rouge"}, obj.Class) {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Class - must be in enum")}
@@ -231,12 +221,22 @@ func (obj *OtherCreateParams) Validate() error {
 
 	// Level min
 	if obj.Level < 1 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be more than min")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("level must be >= 1")}
 	}
 
 	// Level max
 	if obj.Level > 50 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be less than max")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("level must be <= 50")}
+	}
+
+	// Username required
+	if obj.Username == "" {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("username must be not empty")}
+	}
+
+	// Username min
+	if len(obj.Username) < 3 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("username len must be >= 3")}
 	}
 
 	return nil
