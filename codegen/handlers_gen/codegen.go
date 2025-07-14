@@ -41,7 +41,7 @@ type ValidatorRules struct {
 }
 
 func (vr ValidatorRules) HasValues() bool {
-	return vr.IsRequired || len(vr.Enum) > 0 || vr.HasDefault || vr.Min > 0 || vr.Max > 0
+	return vr.IsRequired || len(vr.ParamName) > 0 || len(vr.Enum) > 0 || vr.HasDefault || vr.Min > 0 || vr.Max > 0
 }
 
 type Templates struct {
@@ -228,6 +228,7 @@ func main() {
 	"net/url"
 	"strconv"
 	"slices"
+	"encoding/json"
 )`)
 	fmt.Fprintln(out)
 
@@ -484,17 +485,18 @@ func main() {
 		fmt.Fprintln(out)
 
 		fmt.Fprintln(out, "\tvar response = struct {")
-		fmt.Fprintln(out, "\t\tData interface{}")
-		fmt.Fprintln(out, "\t\tErr error")
+		fmt.Fprintln(out, "\t\tError    string      `json:\"error\"`")
+		fmt.Fprintln(out, "\t\tResponse interface{} `json:\"response,omitempty\"`")
 		fmt.Fprintln(out, "\t}{}")
 		fmt.Fprintln(out)
 
 		fmt.Fprintln(out, "\tif err == nil {")
-		fmt.Fprintln(out, "\t\tresponse.Data = res")
+		fmt.Fprintln(out, "\t\tresponse.Response = res")
 		fmt.Fprintln(out, "\t} else {")
-		fmt.Fprintln(out, "\t\tresponse.Err = err")
+		fmt.Fprintln(out, "\t\tresponse.Error = err.Error()")
 		fmt.Fprintln(out)
-		fmt.Fprintln(out, "\t\tif errApi, ok := err.(ApiError); ok {")
+		fmt.Fprintln(out, "\t\tvar errApi ApiError")
+		fmt.Fprintln(out, "\t\tif errors.As(err, &errApi) {")
 		fmt.Fprintln(out, "\t\t\tw.WriteHeader(errApi.HTTPStatus)")
 		fmt.Fprintln(out, "\t\t} else {")
 		fmt.Fprintln(out, "\t\t\tw.WriteHeader(http.StatusInternalServerError)")

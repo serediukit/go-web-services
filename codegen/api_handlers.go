@@ -2,6 +2,7 @@ package main
 
 import (
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -44,6 +45,10 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 	LoginRaw := params.Get("login")
 	obj.Login = LoginRaw
 
+	// Name
+	NameRaw := params.Get("full_name")
+	obj.Name = NameRaw
+
 	// Status
 	StatusRaw := params.Get("status")
 	obj.Status = StatusRaw
@@ -59,6 +64,11 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 }
 
 func (obj *CreateParams) Validate() error {
+
+	// Age max
+	if obj.Age > 128 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
+	}
 
 	// Login required
 	if obj.Login == "" {
@@ -78,11 +88,6 @@ func (obj *CreateParams) Validate() error {
 	// Status default
 	if obj.Status == "" {
 		obj.Status = "user"
-	}
-
-	// Age max
-	if obj.Age > 128 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be less than max")}
 	}
 
 	return nil
@@ -183,6 +188,10 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 	// Username
 	UsernameRaw := params.Get("username")
 	obj.Username = UsernameRaw
+
+	// Name
+	NameRaw := params.Get("account_name")
+	obj.Name = NameRaw
 
 	// Class
 	ClassRaw := params.Get("class")
@@ -293,16 +302,17 @@ func (h *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response = struct {
-		Data interface{}
-		Err  error
+		Error    string      `json:"error"`
+		Response interface{} `json:"response,omitempty"`
 	}{}
 
 	if err == nil {
-		response.Data = res
+		response.Response = res
 	} else {
-		response.Err = err
+		response.Error = err.Error()
 
-		if errApi, ok := err.(ApiError); ok {
+		var errApi ApiError
+		if errors.As(err, &errApi) {
 			w.WriteHeader(errApi.HTTPStatus)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -328,16 +338,17 @@ func (h *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	}
 
 	var response = struct {
-		Data interface{}
-		Err  error
+		Error    string      `json:"error"`
+		Response interface{} `json:"response,omitempty"`
 	}{}
 
 	if err == nil {
-		response.Data = res
+		response.Response = res
 	} else {
-		response.Err = err
+		response.Error = err.Error()
 
-		if errApi, ok := err.(ApiError); ok {
+		var errApi ApiError
+		if errors.As(err, &errApi) {
 			w.WriteHeader(errApi.HTTPStatus)
 		} else {
 			w.WriteHeader(http.StatusInternalServerError)
