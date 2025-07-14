@@ -20,8 +20,10 @@ type tpl struct {
 }
 
 type enumTpl struct {
-	FieldName  string
-	EnumFields string
+	FieldName       string
+	LowerFieldName  string
+	EnumFields      string
+	EnumFieldsArray string
 }
 
 type minMaxTpl struct {
@@ -89,7 +91,7 @@ var templates = map[string]*Templates{
 		enumTpl: template.Must(template.New("enumIntTpl").Parse(`
 	// {{.FieldName}} enum
 	if !slices.Contains([]string{{"{"}}{{.EnumFields}}{{"}"}}, strconv.Itoa(obj.{{.FieldName}})) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be in enum")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} must be one of [{{.EnumFieldsArray}}]")}
 	}
 `)),
 		defaultTpl: template.Must(template.New("defaultIntTpl").Parse(`
@@ -129,7 +131,7 @@ var templates = map[string]*Templates{
 		enumTpl: template.Must(template.New("enumUint64Tpl").Parse(`
 	// {{.FieldName}} enum
 	if !slices.Contains([]string{{"{"}}{{.EnumFields}}{{"}"}}, strconv.Itoa(obj.{{.FieldName}})) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be in enum")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} must be one of [{{.EnumFieldsArray}}]")}
 	}
 `)),
 		defaultTpl: template.Must(template.New("defaultUint64Tpl").Parse(`
@@ -166,7 +168,7 @@ var templates = map[string]*Templates{
 		enumTpl: template.Must(template.New("enumStringTpl").Parse(`
 	// {{.FieldName}} enum
 	if !slices.Contains([]string{{"{"}}{{.EnumFields}}{{"}"}}, obj.{{.FieldName}}) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be in enum")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.LowerFieldName}} must be one of [{{.EnumFieldsArray}}]")}
 	}
 `)),
 		defaultTpl: template.Must(template.New("defaultStringTpl").Parse(`
@@ -444,7 +446,7 @@ func main() {
 							}
 							resEnum := strings.Join(q, ", ")
 
-							templates[validatorRules.FieldType].enumTpl.Execute(out, enumTpl{FieldName: fieldName, EnumFields: resEnum})
+							templates[validatorRules.FieldType].enumTpl.Execute(out, enumTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), EnumFields: resEnum, EnumFieldsArray: strings.Join(validatorRules.Enum, ", ")})
 						}
 						if validatorRules.HasDefault {
 							templates[validatorRules.FieldType].defaultTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: validatorRules.Default})

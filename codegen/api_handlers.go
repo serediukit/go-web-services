@@ -65,11 +65,6 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 
 func (obj *CreateParams) Validate() error {
 
-	// Age max
-	if obj.Age > 128 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("age must be <= 128")}
-	}
-
 	// Login required
 	if obj.Login == "" {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("login must be not empty")}
@@ -82,12 +77,17 @@ func (obj *CreateParams) Validate() error {
 
 	// Status enum
 	if !slices.Contains([]string{"user", "moderator", "admin"}, obj.Status) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Status - must be in enum")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("status must be one of [user, moderator, admin]")}
 	}
 
 	// Status default
 	if obj.Status == "" {
 		obj.Status = "user"
+	}
+
+	// Age max
+	if obj.Age > 128 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("age must be <= 128")}
 	}
 
 	return nil
@@ -221,7 +221,7 @@ func (obj *OtherCreateParams) Validate() error {
 
 	// Class enum
 	if !slices.Contains([]string{"warrior", "sorcerer", "rouge"}, obj.Class) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Class - must be in enum")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("class must be one of [warrior, sorcerer, rouge]")}
 	}
 
 	// Class default
