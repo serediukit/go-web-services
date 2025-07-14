@@ -2,7 +2,7 @@ package main
 
 import (
 	"encoding/json"
-	
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
@@ -56,7 +56,7 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 	// Age
 	AgeRaw, err := strconv.Atoi(params.Get("age"))
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Age - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("age must be int")}
 	}
 	obj.Age = AgeRaw
 
@@ -64,6 +64,11 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 }
 
 func (obj *CreateParams) Validate() error {
+
+	// Age max
+	if obj.Age > 128 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("age must be <= 128")}
+	}
 
 	// Login required
 	if obj.Login == "" {
@@ -83,11 +88,6 @@ func (obj *CreateParams) Validate() error {
 	// Status default
 	if obj.Status == "" {
 		obj.Status = "user"
-	}
-
-	// Age max
-	if obj.Age > 128 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("age must be <= 128")}
 	}
 
 	return nil
@@ -200,7 +200,7 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 	// Level
 	LevelRaw, err := strconv.Atoi(params.Get("level"))
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid Level - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("level must be int")}
 	}
 	obj.Level = LevelRaw
 
@@ -208,6 +208,16 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 }
 
 func (obj *OtherCreateParams) Validate() error {
+
+	// Username required
+	if obj.Username == "" {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("username must be not empty")}
+	}
+
+	// Username min
+	if len(obj.Username) < 3 {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("username len must be >= 3")}
+	}
 
 	// Class enum
 	if !slices.Contains([]string{"warrior", "sorcerer", "rouge"}, obj.Class) {
@@ -227,16 +237,6 @@ func (obj *OtherCreateParams) Validate() error {
 	// Level max
 	if obj.Level > 50 {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("level must be <= 50")}
-	}
-
-	// Username required
-	if obj.Username == "" {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("username must be not empty")}
-	}
-
-	// Username min
-	if len(obj.Username) < 3 {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("username len must be >= 3")}
 	}
 
 	return nil

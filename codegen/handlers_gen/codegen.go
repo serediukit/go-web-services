@@ -76,7 +76,7 @@ var templates = map[string]*Templates{
 	// {{.FieldName}}
 	{{.FieldName}}Raw, err := strconv.Atoi(params.Get("{{.RequestFieldName}}"))
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be int")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.RequestFieldName}} must be int")}
 	}
 	obj.{{.FieldName}} = {{.FieldName}}Raw
 `)),
@@ -116,7 +116,7 @@ var templates = map[string]*Templates{
 	// {{.FieldName}}
 	{{.FieldName}}Raw, err := strconv.ParseUint(params.Get("{{.RequestFieldName}}"), 10, 64)
 	if err != nil {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("invalid {{.FieldName}} - must be uint64")}
+		return ApiError{http.StatusBadRequest, fmt.Errorf("{{.RequestFieldName}} must be uint64")}
 	}
 	obj.{{.FieldName}} = {{.FieldName}}Raw
 `)),
@@ -229,13 +229,13 @@ func main() {
 	fmt.Fprintln(out, `package `+node.Name.Name)
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, `import (
+	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"net/url"
-	"strconv"
 	"slices"
-	"encoding/json"
-	"errors"
+	"strconv"
 )`)
 	fmt.Fprintln(out)
 
@@ -402,8 +402,6 @@ func main() {
 
 					fmt.Printf("\tgenerating code for field %s.%s\n", currType.Name.Name, fieldName)
 
-					lowerFieldName := strings.ToLower(fieldName)
-
 					switch fieldType {
 					case "int":
 						fallthrough
@@ -412,9 +410,9 @@ func main() {
 					case "string":
 						if validatorRules, ok := fieldsToValidate[fieldName]; ok {
 							if validatorRules.ParamName != "" {
-								templates[fieldType].tpl.Execute(out, tpl{fieldName, strings.ToLower(validatorRules.ParamName)})
+								templates[fieldType].tpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(validatorRules.ParamName)})
 							} else {
-								templates[fieldType].tpl.Execute(out, tpl{fieldName, lowerFieldName})
+								templates[fieldType].tpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(fieldName)})
 							}
 						}
 					default:
