@@ -65,16 +65,6 @@ func (obj *CreateParams) Unpack(params url.Values) error {
 
 func (obj *CreateParams) Validate() error {
 
-	// Status enum
-	if !slices.Contains([]string{"user", "moderator", "admin"}, obj.Status) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("status must be one of [user, moderator, admin]")}
-	}
-
-	// Status default
-	if obj.Status == "" {
-		obj.Status = "user"
-	}
-
 	// Age min
 	if obj.Age < 0 {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("age must be >= 0")}
@@ -93,6 +83,16 @@ func (obj *CreateParams) Validate() error {
 	// Login min
 	if len(obj.Login) < 10 {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("login len must be >= 10")}
+	}
+
+	// Status default
+	if obj.Status == "" {
+		obj.Status = "user"
+	}
+
+	// Status enum
+	if !slices.Contains([]string{"user", "moderator", "admin"}, obj.Status) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("status must be one of [user, moderator, admin]")}
 	}
 
 	return nil
@@ -214,6 +214,16 @@ func (obj *OtherCreateParams) Unpack(params url.Values) error {
 
 func (obj *OtherCreateParams) Validate() error {
 
+	// Class default
+	if obj.Class == "" {
+		obj.Class = "warrior"
+	}
+
+	// Class enum
+	if !slices.Contains([]string{"warrior", "sorcerer", "rouge"}, obj.Class) {
+		return ApiError{http.StatusBadRequest, fmt.Errorf("class must be one of [warrior, sorcerer, rouge]")}
+	}
+
 	// Level min
 	if obj.Level < 1 {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("level must be >= 1")}
@@ -232,16 +242,6 @@ func (obj *OtherCreateParams) Validate() error {
 	// Username min
 	if len(obj.Username) < 3 {
 		return ApiError{http.StatusBadRequest, fmt.Errorf("username len must be >= 3")}
-	}
-
-	// Class enum
-	if !slices.Contains([]string{"warrior", "sorcerer", "rouge"}, obj.Class) {
-		return ApiError{http.StatusBadRequest, fmt.Errorf("class must be one of [warrior, sorcerer, rouge]")}
-	}
-
-	// Class default
-	if obj.Class == "" {
-		obj.Class = "warrior"
 	}
 
 	return nil
@@ -291,13 +291,15 @@ func (h *OtherApi) wrapperCreate(w http.ResponseWriter, r *http.Request) (interf
 	return h.Create(r.Context(), in)
 }
 
-func (h *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		err error
 		res interface{}
 	)
 
 	switch r.URL.Path {
+	case "/user/profile":
+		res, err = h.wrapperProfile(w, r)
 	case "/user/create":
 		res, err = h.wrapperCreate(w, r)
 	default:
@@ -327,15 +329,13 @@ func (h *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	w.Write(responseJson)
 }
 
-func (h *MyApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+func (h *OtherApi) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	var (
 		err error
 		res interface{}
 	)
 
 	switch r.URL.Path {
-	case "/user/profile":
-		res, err = h.wrapperProfile(w, r)
 	case "/user/create":
 		res, err = h.wrapperCreate(w, r)
 	default:

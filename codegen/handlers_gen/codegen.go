@@ -212,6 +212,45 @@ func (h {{.ReceiverName}}) wrapper{{.FuncName}}(w http.ResponseWriter, r *http.R
 
 	return h.{{.FuncName}}(r.Context(), in)
 `))
+	serveHTTPTpl = template.Must(template.New("serveHTTPTpl").Parse(`
+func (h {{ .APIName }}) ServeHTTP(w http.ResponseWriter, r *http.Request) {
+	var (
+		err error
+		res interface{}
+	)
+
+	switch r.URL.Path {
+	{{- range .Methods }}
+	case "{{ .Url }}":
+		res, err = h.wrapper{{ .Method }}(w, r)
+	{{- end }}
+	default:
+		err = ApiError{http.StatusNotFound, fmt.Errorf("unknown method")}
+	}
+
+	var response = struct {
+		Error    string      ` + "`json:\"error\"`" + `
+		Response interface{} ` + "`json:\"response,omitempty\"`" + `
+	}{}
+
+	if err == nil {
+		response.Response = res
+	} else {
+		response.Error = err.Error()
+
+		var errApi ApiError
+		if errors.As(err, &errApi) {
+			w.WriteHeader(errApi.HTTPStatus)
+		} else {
+			w.WriteHeader(http.StatusInternalServerError)
+		}
+	}
+
+	responseJson, _ := json.Marshal(response)
+	w.Header().Set("Content-Type", "application/json")
+	w.Write(responseJson)
+}
+`))
 )
 
 type ApiMethod struct {
@@ -219,7 +258,14 @@ type ApiMethod struct {
 	Method string
 }
 
+type ApiTpl struct {
+	APIName string
+	Methods ApiStruct
+}
+
 type ApiStruct []ApiMethod
+
+var apisRoutes = make(map[string]ApiStruct)
 
 func main() {
 	fset := token.NewFileSet()
@@ -230,7 +276,26 @@ func main() {
 
 	out, _ := os.Create(os.Args[2])
 
-	fmt.Fprintln(out, `package `+node.Name.Name)
+	createPackageAndImports(out, node.Name.Name)
+
+	for _, f := range node.Decls {
+		switch f.(type) {
+		case *ast.FuncDecl:
+			generateForFunc(out, f)
+		case *ast.GenDecl:
+			generateForType(out, f)
+		default:
+			fmt.Printf("SKIP %#T is not *ast.GenDecl or *ast.FuncDecl\n", f)
+		}
+	}
+
+	for apiName, apiStruct := range apisRoutes {
+		serveHTTPTpl.Execute(out, &ApiTpl{APIName: apiName, Methods: apiStruct})
+	}
+}
+
+func createPackageAndImports(out *os.File, nodeName string) {
+	fmt.Fprintln(out, `package `+nodeName)
 	fmt.Fprintln(out)
 	fmt.Fprintln(out, `import (
 	"encoding/json"
@@ -242,284 +307,254 @@ func main() {
 	"strconv"
 )`)
 	fmt.Fprintln(out)
+}
 
-	apisRoutes := make(map[string]ApiStruct)
+func generateForFunc(out *os.File, f ast.Decl) {
+	g, _ := f.(*ast.FuncDecl)
+	needCodegen := false
+	if g.Doc != nil {
+		var comment *ast.Comment
+		for _, comment = range g.Doc.List {
+			needCodegen = needCodegen || strings.HasPrefix(comment.Text, "// apigen:api")
+		}
+		if !needCodegen {
+			fmt.Printf("SKIP func %#v doesnt have cgen mark\n", g.Name.Name)
+			return
+		}
 
-	for _, f := range node.Decls {
-		switch f.(type) {
-		case *ast.FuncDecl:
-			g, _ := f.(*ast.FuncDecl)
-			needCodegen := false
-			if g.Doc != nil {
-				var comment *ast.Comment
-				for _, comment = range g.Doc.List {
-					needCodegen = needCodegen || strings.HasPrefix(comment.Text, "// apigen:api")
-				}
-				if !needCodegen {
-					fmt.Printf("SKIP func %#v doesnt have cgen mark\n", g.Name.Name)
-					continue
-				}
-
-				var receiverType string
-				switch expr := g.Recv.List[0].Type.(type) {
-				case *ast.StarExpr:
-					if ident, ok := expr.X.(*ast.Ident); ok {
-						receiverType = "*" + ident.Name
-					}
-				case *ast.Ident:
-					receiverType = expr.Name
-				default:
-				}
-
-				funcHeaderTpl.Execute(out, funcTpl{ReceiverName: receiverType, FuncName: g.Name.Name})
-
-				jsonData := comment.Text[13:]
-				apiData := &ApiMethodsJson{}
-				if err = json.Unmarshal([]byte(jsonData), apiData); err != nil {
-					fmt.Printf("SKIP func %#v has invalid json data\n", g.Name.Name)
-				}
-
-				apisRoutes[receiverType] = append(apisRoutes[receiverType], ApiMethod{Url: apiData.Url, Method: g.Name.Name})
-
-				if apiData.Auth {
-					fmt.Fprintln(out, "\tif r.Header.Get(\"X-Auth\") != \"100500\" {")
-					fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusForbidden, fmt.Errorf(\"unauthorized\")}")
-					fmt.Fprintln(out, "\t}")
-					fmt.Fprintln(out)
-				}
-
-				if apiData.Method != "" {
-					fmt.Fprintln(out, "\tif r.Method != \""+apiData.Method+"\" {")
-					fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusNotAcceptable, fmt.Errorf(\"bad method\")}")
-					fmt.Fprintln(out, "\t}")
-					fmt.Fprintln(out)
-				}
-
-				fmt.Fprintln(out, "\tvar params url.Values")
-				fmt.Fprintln(out, "\tif r.Method == \"GET\" {")
-				fmt.Fprintln(out, "\t\tparams = r.URL.Query()")
-				fmt.Fprintln(out, "\t} else {")
-				fmt.Fprintln(out, "\t\terr := r.ParseForm()")
-				fmt.Fprintln(out, "\t\tif err != nil {")
-				fmt.Fprintln(out, "\t\t\treturn nil, ApiError{http.StatusBadRequest, fmt.Errorf(\"invalid request\")}")
-				fmt.Fprintln(out, "\t\t}")
-				fmt.Fprintln(out, "\t\tparams = r.PostForm")
-				fmt.Fprintln(out, "\t}")
-
-				var typeStr string
-				switch t := g.Type.Params.List[1].Type.(type) {
-				case *ast.Ident:
-					typeStr = t.Name
-				case *ast.StarExpr:
-					if ident, ok := t.X.(*ast.Ident); ok {
-						typeStr = "*" + ident.Name
-					}
-				case *ast.SelectorExpr:
-					if pkg, ok := t.X.(*ast.Ident); ok {
-						typeStr = pkg.Name + "." + t.Sel.Name
-					}
-				default:
-					typeStr = fmt.Sprintf("%T", t) //
-				}
-
-				funcParamsTpl.Execute(out, FuncInTpl{StructInName: typeStr, FuncName: g.Name.Name})
-
-				fmt.Fprintln(out, "}")
-				fmt.Fprintln(out)
+		var receiverType string
+		switch expr := g.Recv.List[0].Type.(type) {
+		case *ast.StarExpr:
+			if ident, ok := expr.X.(*ast.Ident); ok {
+				receiverType = "*" + ident.Name
 			}
+		case *ast.Ident:
+			receiverType = expr.Name
+		default:
+		}
 
-		case *ast.GenDecl:
-			g, _ := f.(*ast.GenDecl)
-			// SPECS_LOOP:
-			for _, spec := range g.Specs {
-				currType, ok := spec.(*ast.TypeSpec)
-				if !ok {
-					fmt.Printf("SKIP %#T is not ast.TypeSpec\n", spec)
-					continue
-				}
+		funcHeaderTpl.Execute(out, funcTpl{ReceiverName: receiverType, FuncName: g.Name.Name})
 
-				currStruct, ok := currType.Type.(*ast.StructType)
-				if !ok {
-					fmt.Printf("SKIP %#T is not ast.StructType\n", currStruct)
-					continue
-				}
+		jsonData := comment.Text[13:]
+		apiData := &ApiMethodsJson{}
+		if err := json.Unmarshal([]byte(jsonData), apiData); err != nil {
+			fmt.Printf("SKIP func %#v has invalid json data\n", g.Name.Name)
+		}
 
-				if currType.Name.Name == "ApiError" {
-					fmt.Printf("SKIP struct %#v is ApiError\n", currType.Name.Name)
-					continue
-				}
+		apisRoutes[receiverType] = append(apisRoutes[receiverType], ApiMethod{Url: apiData.Url, Method: g.Name.Name})
 
-				fmt.Printf("process struct %s\n", currType.Name.Name)
-				fmt.Printf("\tgenerating Unpack method\n")
+		createInitFuncCode(out, apiData)
 
-				fmt.Fprintln(out, "func (obj *"+currType.Name.Name+") Unpack(params url.Values) error {")
-
-				fieldsToValidate := make(map[string]*ValidatorRules)
-
-				// FIELDS_LOOP:
-				for _, field := range currStruct.Fields.List {
-					fieldName := field.Names[0].Name
-					fieldIdent, ok := field.Type.(*ast.Ident)
-					if !ok {
-						fmt.Printf("SKIP %#T is not ast.Ident\n", field.Type)
-						continue
-					}
-
-					fieldType := fieldIdent.Name
-
-					if field.Tag != nil {
-						tag := reflect.StructTag(field.Tag.Value[1 : len(field.Tag.Value)-1])
-
-						if res, ok := tag.Lookup("apivalidator"); ok {
-							rules := &ValidatorRules{FieldType: fieldType}
-
-							tags := strings.Split(res, ",")
-
-							for _, t := range tags {
-								if t == "required" {
-									rules.IsRequired = true
-								} else {
-									parts := strings.Split(t, "=")
-									if len(parts) == 2 {
-										switch parts[0] {
-										case "paramname":
-											rules.ParamName = parts[1]
-										case "enum":
-											rules.Enum = strings.Split(parts[1], "|")
-										case "default":
-											rules.Default = parts[1]
-											rules.HasDefault = true
-										case "min":
-											rules.Min, _ = strconv.Atoi(parts[1])
-											rules.HasMin = true
-										case "max":
-											rules.Max, _ = strconv.Atoi(parts[1])
-											rules.HasMax = true
-										}
-									}
-								}
-							}
-
-							if rules.HasValues() {
-								fieldsToValidate[fieldName] = rules
-							}
-						}
-					}
-
-					fmt.Printf("\tgenerating code for field %s.%s\n", currType.Name.Name, fieldName)
-
-					switch fieldType {
-					case "int":
-						fallthrough
-					case "uint64":
-						fallthrough
-					case "string":
-						if validatorRules, ok := fieldsToValidate[fieldName]; ok {
-							if validatorRules.ParamName != "" {
-								templates[fieldType].tpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(validatorRules.ParamName)})
-							} else {
-								templates[fieldType].tpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(fieldName)})
-							}
-						}
-					default:
-						log.Fatalln("unsupported", fieldType)
-					}
-				}
-
-				fmt.Fprintln(out)
-				fmt.Fprintln(out, "	return nil")
-				fmt.Fprintln(out, "}")
-				fmt.Fprintln(out)
-
-				fmt.Fprintln(out, "func (obj *"+currType.Name.Name+") Validate() error {")
-
-				for fieldName, validatorRules := range fieldsToValidate {
-					switch validatorRules.FieldType {
-					case "int":
-						fallthrough
-					case "uint64":
-						fallthrough
-					case "string":
-						if validatorRules.IsRequired {
-							templates[validatorRules.FieldType].requiredTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(fieldName)})
-						}
-						if len(validatorRules.Enum) > 0 {
-							q := make([]string, len(validatorRules.Enum))
-							for i, v := range validatorRules.Enum {
-								q[i] = `"` + v + `"`
-							}
-							resEnum := strings.Join(q, ", ")
-
-							templates[validatorRules.FieldType].enumTpl.Execute(out, enumTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), EnumFields: resEnum, EnumFieldsArray: strings.Join(validatorRules.Enum, ", ")})
-						}
-						if validatorRules.HasDefault {
-							templates[validatorRules.FieldType].defaultTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: validatorRules.Default})
-						}
-						if validatorRules.HasMin {
-							templates[validatorRules.FieldType].minTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Min)})
-						}
-						if validatorRules.HasMax {
-							templates[validatorRules.FieldType].maxTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Max)})
-						}
-					default:
-						log.Fatalln("unsupported", validatorRules.FieldType)
-					}
-				}
-
-				fmt.Fprintln(out)
-				fmt.Fprintln(out, "	return nil")
-				fmt.Fprintln(out, "}")
-				fmt.Fprintln(out)
+		var typeStr string
+		switch t := g.Type.Params.List[1].Type.(type) {
+		case *ast.Ident:
+			typeStr = t.Name
+		case *ast.StarExpr:
+			if ident, ok := t.X.(*ast.Ident); ok {
+				typeStr = "*" + ident.Name
+			}
+		case *ast.SelectorExpr:
+			if pkg, ok := t.X.(*ast.Ident); ok {
+				typeStr = pkg.Name + "." + t.Sel.Name
 			}
 		default:
-			fmt.Printf("SKIP %#T is not *ast.GenDecl or *ast.FuncDecl\n", f)
+			typeStr = fmt.Sprintf("%T", t) //
 		}
-	}
 
-	for apiName, apiStruct := range apisRoutes {
-		fmt.Fprintf(out, "func (h %s) ServeHTTP(w http.ResponseWriter, r *http.Request) {\n", apiName)
-
-		fmt.Fprintln(out, "\tvar (")
-		fmt.Fprintln(out, "\t\terr error")
-		fmt.Fprintln(out, "\t\tres interface{}")
-		fmt.Fprintln(out, "\t)")
-		fmt.Fprintln(out)
-
-		fmt.Fprintln(out, "\tswitch r.URL.Path {")
-		for _, apiMethod := range apiStruct {
-			fmt.Fprintf(out, "\tcase \"%s\":\n", apiMethod.Url)
-			fmt.Fprintf(out, "\t\tres, err = h.wrapper%s(w, r)\n", apiMethod.Method)
-		}
-		fmt.Fprintln(out, "\tdefault:")
-		fmt.Fprintln(out, "\t\terr = ApiError{http.StatusNotFound, fmt.Errorf(\"unknown method\")}")
-		fmt.Fprintln(out, "\t}")
-		fmt.Fprintln(out)
-
-		fmt.Fprintln(out, "\tvar response = struct {")
-		fmt.Fprintln(out, "\t\tError    string      `json:\"error\"`")
-		fmt.Fprintln(out, "\t\tResponse interface{} `json:\"response,omitempty\"`")
-		fmt.Fprintln(out, "\t}{}")
-		fmt.Fprintln(out)
-
-		fmt.Fprintln(out, "\tif err == nil {")
-		fmt.Fprintln(out, "\t\tresponse.Response = res")
-		fmt.Fprintln(out, "\t} else {")
-		fmt.Fprintln(out, "\t\tresponse.Error = err.Error()")
-		fmt.Fprintln(out)
-		fmt.Fprintln(out, "\t\tvar errApi ApiError")
-		fmt.Fprintln(out, "\t\tif errors.As(err, &errApi) {")
-		fmt.Fprintln(out, "\t\t\tw.WriteHeader(errApi.HTTPStatus)")
-		fmt.Fprintln(out, "\t\t} else {")
-		fmt.Fprintln(out, "\t\t\tw.WriteHeader(http.StatusInternalServerError)")
-		fmt.Fprintln(out, "\t\t}")
-		fmt.Fprintln(out, "\t}")
-		fmt.Fprintln(out)
-
-		fmt.Fprintln(out, "\tresponseJson, _ := json.Marshal(response)")
-		fmt.Fprintln(out, "\tw.Header().Set(\"Content-Type\", \"application/json\")")
-		fmt.Fprintln(out, "\tw.Write(responseJson)")
+		funcParamsTpl.Execute(out, FuncInTpl{StructInName: typeStr, FuncName: g.Name.Name})
 
 		fmt.Fprintln(out, "}")
 		fmt.Fprintln(out)
 	}
+}
+
+func createInitFuncCode(out *os.File, apiData *ApiMethodsJson) {
+	if apiData.Auth {
+		fmt.Fprintln(out, "\tif r.Header.Get(\"X-Auth\") != \"100500\" {")
+		fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusForbidden, fmt.Errorf(\"unauthorized\")}")
+		fmt.Fprintln(out, "\t}")
+		fmt.Fprintln(out)
+	}
+
+	if apiData.Method != "" {
+		fmt.Fprintln(out, "\tif r.Method != \""+apiData.Method+"\" {")
+		fmt.Fprintln(out, "\t\treturn nil, ApiError{http.StatusNotAcceptable, fmt.Errorf(\"bad method\")}")
+		fmt.Fprintln(out, "\t}")
+		fmt.Fprintln(out)
+	}
+
+	fmt.Fprintln(out, "\tvar params url.Values")
+	fmt.Fprintln(out, "\tif r.Method == \"GET\" {")
+	fmt.Fprintln(out, "\t\tparams = r.URL.Query()")
+	fmt.Fprintln(out, "\t} else {")
+	fmt.Fprintln(out, "\t\terr := r.ParseForm()")
+	fmt.Fprintln(out, "\t\tif err != nil {")
+	fmt.Fprintln(out, "\t\t\treturn nil, ApiError{http.StatusBadRequest, fmt.Errorf(\"invalid request\")}")
+	fmt.Fprintln(out, "\t\t}")
+	fmt.Fprintln(out, "\t\tparams = r.PostForm")
+	fmt.Fprintln(out, "\t}")
+}
+
+func generateForType(out *os.File, f ast.Decl) {
+	g, _ := f.(*ast.GenDecl)
+	for _, spec := range g.Specs {
+		currType, ok := spec.(*ast.TypeSpec)
+		if !ok {
+			fmt.Printf("SKIP %#T is not ast.TypeSpec\n", spec)
+			continue
+		}
+
+		currStruct, ok := currType.Type.(*ast.StructType)
+		if !ok {
+			fmt.Printf("SKIP %#T is not ast.StructType\n", currStruct)
+			continue
+		}
+
+		if currType.Name.Name == "ApiError" {
+			fmt.Printf("SKIP struct %#v is ApiError\n", currType.Name.Name)
+			continue
+		}
+
+		fmt.Printf("process struct %s\n", currType.Name.Name)
+
+		fieldsToValidate := createUnpacking(out, currType.Name.Name, currStruct.Fields.List)
+
+		createValidation(out, currType.Name.Name, fieldsToValidate)
+	}
+}
+
+func createUnpacking(out *os.File, typeName string, fieldsList []*ast.Field) *map[string]*ValidatorRules {
+	fmt.Printf("\tgenerating Unpack method\n")
+
+	fmt.Fprintln(out, "func (obj *"+typeName+") Unpack(params url.Values) error {")
+
+	fieldsToValidate := make(map[string]*ValidatorRules)
+
+	for _, field := range fieldsList {
+		fieldName := field.Names[0].Name
+		fieldIdent, ok := field.Type.(*ast.Ident)
+		if !ok {
+			fmt.Printf("SKIP %#T is not ast.Ident\n", field.Type)
+			continue
+		}
+
+		fieldType := fieldIdent.Name
+
+		rules := getRules(field, fieldType)
+		if rules != nil {
+			fieldsToValidate[fieldName] = rules
+		}
+
+		fmt.Printf("\tgenerating code for field %s.%s\n", typeName, fieldName)
+
+		switch fieldType {
+		case "int":
+			fallthrough
+		case "uint64":
+			fallthrough
+		case "string":
+			if validatorRules, ok := fieldsToValidate[fieldName]; ok {
+				if validatorRules.ParamName != "" {
+					templates[fieldType].tpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(validatorRules.ParamName)})
+				} else {
+					templates[fieldType].tpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(fieldName)})
+				}
+			}
+		default:
+			log.Fatalln("unsupported", fieldType)
+		}
+	}
+
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "	return nil")
+	fmt.Fprintln(out, "}")
+	fmt.Fprintln(out)
+
+	return &fieldsToValidate
+}
+
+func getRules(field *ast.Field, fieldType string) *ValidatorRules {
+	if field.Tag != nil {
+		tag := reflect.StructTag(field.Tag.Value[1 : len(field.Tag.Value)-1])
+
+		if res, ok := tag.Lookup("apivalidator"); ok {
+			rules := &ValidatorRules{FieldType: fieldType}
+
+			tags := strings.Split(res, ",")
+
+			for _, t := range tags {
+				if t == "required" {
+					rules.IsRequired = true
+				} else {
+					parts := strings.Split(t, "=")
+					if len(parts) == 2 {
+						switch parts[0] {
+						case "paramname":
+							rules.ParamName = parts[1]
+						case "enum":
+							rules.Enum = strings.Split(parts[1], "|")
+						case "default":
+							rules.Default = parts[1]
+							rules.HasDefault = true
+						case "min":
+							rules.Min, _ = strconv.Atoi(parts[1])
+							rules.HasMin = true
+						case "max":
+							rules.Max, _ = strconv.Atoi(parts[1])
+							rules.HasMax = true
+						}
+					}
+				}
+			}
+
+			if rules.HasValues() {
+				return rules
+			}
+		}
+	}
+	return nil
+}
+
+func createValidation(out *os.File, typeName string, fieldsToValidate *map[string]*ValidatorRules) {
+	fmt.Printf("\tgenerating Validate method\n")
+
+	fmt.Fprintln(out, "func (obj *"+typeName+") Validate() error {")
+
+	for fieldName, validatorRules := range *fieldsToValidate {
+		switch validatorRules.FieldType {
+		case "int":
+			fallthrough
+		case "uint64":
+			fallthrough
+		case "string":
+			if validatorRules.IsRequired {
+				templates[validatorRules.FieldType].requiredTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: strings.ToLower(fieldName)})
+			}
+			if validatorRules.HasDefault {
+				templates[validatorRules.FieldType].defaultTpl.Execute(out, tpl{FieldName: fieldName, RequestFieldName: validatorRules.Default})
+			}
+			if len(validatorRules.Enum) > 0 {
+				q := make([]string, len(validatorRules.Enum))
+				for i, v := range validatorRules.Enum {
+					q[i] = `"` + v + `"`
+				}
+				resEnum := strings.Join(q, ", ")
+
+				templates[validatorRules.FieldType].enumTpl.Execute(out, enumTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), EnumFields: resEnum, EnumFieldsArray: strings.Join(validatorRules.Enum, ", ")})
+			}
+			if validatorRules.HasMin {
+				templates[validatorRules.FieldType].minTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Min)})
+			}
+			if validatorRules.HasMax {
+				templates[validatorRules.FieldType].maxTpl.Execute(out, minMaxTpl{FieldName: fieldName, LowerFieldName: strings.ToLower(fieldName), Length: strconv.Itoa(validatorRules.Max)})
+			}
+		default:
+			log.Fatalln("unsupported", validatorRules.FieldType)
+		}
+	}
+
+	fmt.Fprintln(out)
+	fmt.Fprintln(out, "	return nil")
+	fmt.Fprintln(out, "}")
+	fmt.Fprintln(out)
 }
