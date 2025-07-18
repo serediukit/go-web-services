@@ -15,7 +15,7 @@ var (
 	// вы можете изменить этот на тот который вам нужен
 	// docker run -p 3306:3306 -v $(PWD):/docker-entrypoint-initdb.d -e MYSQL_ROOT_PASSWORD=1234 -e MYSQL_DATABASE=golang -d mysql
 	DSN = "root:1234@tcp(localhost:3306)/photolist?charset=utf8"
-	//DSN = "coursera:5QPbAUufx7@tcp(localhost:3306)/coursera?charset=utf8"
+	// DSN = "coursera:5QPbAUufx7@tcp(localhost:3306)/coursera?charset=utf8"
 )
 
 func main() {
@@ -30,6 +30,9 @@ func main() {
 		panic(err)
 	}
 
-	fmt.Println("starting server at :8082")
-	_ = http.ListenAndServe(":8082", handler)
+	fmt.Println("starting server at :8083")
+	err = http.ListenAndServe(":8083", handler)
+	if err != nil {
+		panic(err)
+	}
 }
