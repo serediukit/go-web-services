@@ -29,7 +29,8 @@ type DBExplorer struct {
 func (dbe *DBExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	method := r.Method
 	url := r.URL.Path
-	fmt.Println(url)
+
+	fmt.Printf("%7s %s\n", r.Method, r.URL.Path)
 
 	if method == http.MethodGet {
 		urlParts := strings.Split(url, "/")
@@ -49,7 +50,7 @@ func (dbe *DBExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if method == http.MethodPost {
 
 	} else if method == http.MethodPut {
-
+		PutRowHandler(dbe.DB)(w, r)
 	} else if method == http.MethodDelete {
 
 	} else {
@@ -63,8 +64,6 @@ func NewDbExplorer(db *sql.DB) (http.Handler, error) {
 
 func GetTablesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("GET TABLES")
-
 		res, err := GetTables(db)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
@@ -106,8 +105,6 @@ func GetTables(db *sql.DB) ([]string, error) {
 
 func GetRowsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("GET ROWS")
-
 		urlPart := strings.Split(r.URL.Path, "/")[1]
 		table := strings.Split(urlPart, "?")[0]
 
@@ -156,8 +153,6 @@ func GetRows(db *sql.DB, table, limit, offset string) (RowsData, error) {
 
 func GetRowsByIDHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("GET ROWS BY ID")
-
 		urlParts := strings.Split(r.URL.Path, "/")
 		table := strings.Split(urlParts[1], "?")[0]
 		id := strings.Split(urlParts[2], "?")[0]
@@ -198,6 +193,54 @@ func GetRowsById(db *sql.DB, table, id string) (RowsData, error) {
 	defer rows.Close()
 
 	return unpackRows(rows)
+}
+
+func PutRowHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		urlPart := strings.Split(r.URL.Path, "/")[1]
+		table := strings.Split(urlPart, "?")[0]
+
+		var rowData map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&rowData); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		res, err := PutRow(db, table, rowData)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write([]byte(fmt.Sprintf(`{"id": %d}`, res)))
+	}
+}
+
+func PutRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, error) {
+	query := fmt.Sprintf("INSERT INTO %s", table)
+
+	paramRow := make([]string, len(rowData))
+	valueRow := make([]string, len(rowData))
+
+	i := 0
+	for colName, val := range rowData {
+		paramRow[i] = colName
+		valueRow[i] = fmt.Sprintf("'%v'", val)
+		i++
+	}
+
+	query += fmt.Sprintf(" (%s) VALUES (%s)", strings.Join(paramRow, ", "), strings.Join(valueRow, ", "))
+
+	res, err := db.Exec(query)
+	if err != nil {
+		return -1, err
+	}
+
+	return res.LastInsertId()
 }
 
 func unpackRows(rows *sql.Rows) (RowsData, error) {
