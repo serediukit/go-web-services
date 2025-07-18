@@ -68,12 +68,14 @@ func GetTablesHandler(db *sql.DB) http.HandlerFunc {
 		res, err := GetTables(db)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 			return
 		}
 
 		resJson, err := json.Marshal(res)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 			return
 		}
 
@@ -122,6 +124,7 @@ func GetRowsHandler(db *sql.DB) http.HandlerFunc {
 		res, err := GetRows(db, table, limit, offset)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 			return
 		}
 
@@ -130,6 +133,7 @@ func GetRowsHandler(db *sql.DB) http.HandlerFunc {
 		resJson, err := json.Marshal(res)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
 			return
 		}
 
@@ -152,9 +156,48 @@ func GetRows(db *sql.DB, table, limit, offset string) (RowsData, error) {
 
 func GetRowsByIDHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		fmt.Println("GET ROW BY ID")
+		fmt.Println("GET ROWS BY ID")
 
+		urlParts := strings.Split(r.URL.Path, "/")
+		table := strings.Split(urlParts[1], "?")[0]
+		id := strings.Split(urlParts[2], "?")[0]
+
+		res, err := GetRowsById(db, table, id)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		fmt.Println(res)
+
+		resJson, err := json.Marshal(res)
+		if err != nil {
+			w.WriteHeader(http.StatusInternalServerError)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		w.WriteHeader(http.StatusOK)
+		w.Header().Set("Content-Type", "application/json")
+		w.Write(resJson)
 	}
+}
+
+func GetRowsById(db *sql.DB, table, id string) (RowsData, error) {
+	idColumnName, err := getIdColumnName(db, table)
+	if err != nil {
+		return nil, err
+	}
+
+	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, idColumnName)
+	rows, err := db.Query(query, id)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+
+	return unpackRows(rows)
 }
 
 func unpackRows(rows *sql.Rows) (RowsData, error) {
@@ -190,4 +233,22 @@ func unpackRows(rows *sql.Rows) (RowsData, error) {
 	}
 
 	return res, nil
+}
+
+func getIdColumnName(db *sql.DB, table string) (string, error) {
+	rows, err := db.Query("SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY'", table)
+	if err != nil {
+		return "", err
+	}
+	defer rows.Close()
+
+	for rows.Next() {
+		var id string
+		if err = rows.Scan(&id); err != nil {
+			return "", err
+		}
+		return id, nil
+	}
+
+	return "", nil
 }
