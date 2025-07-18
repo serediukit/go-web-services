@@ -41,6 +41,8 @@ func (dbe *DBExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			} else {
 				GetRowsHandler(dbe.DB)(w, r)
 			}
+		case 3:
+			GetRowsByIDHandler(dbe.DB)(w, r)
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
@@ -104,7 +106,8 @@ func GetRowsHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		fmt.Println("GET ROWS")
 
-		table := strings.Split(strings.Split(r.URL.Path, "/")[1], "?")[0]
+		urlPart := strings.Split(r.URL.Path, "/")[1]
+		table := strings.Split(urlPart, "?")[0]
 
 		limit := r.URL.Query().Get("limit")
 		if limit == "" {
@@ -144,6 +147,17 @@ func GetRows(db *sql.DB, table, limit, offset string) (RowsData, error) {
 	}
 	defer rows.Close()
 
+	return unpackRows(rows)
+}
+
+func GetRowsByIDHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		fmt.Println("GET ROW BY ID")
+
+	}
+}
+
+func unpackRows(rows *sql.Rows) (RowsData, error) {
 	columns, err := rows.Columns()
 	if err != nil {
 		return nil, err
@@ -159,7 +173,7 @@ func GetRows(db *sql.DB, table, limit, offset string) (RowsData, error) {
 		}
 
 		if err = rows.Scan(row.ColumnPointers...); err != nil {
-			panic(err)
+			return nil, err
 		}
 
 		rowData := make(map[string]interface{})
