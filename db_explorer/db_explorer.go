@@ -187,7 +187,7 @@ func GetRowsById(db *sql.DB, table, id string) (RowData, *ResponseError) {
 	}
 
 	if res == nil || len(res) == 0 {
-		return nil, &ResponseError{Error: "unknown id", StatusCode: http.StatusNotFound}
+		return nil, &ResponseError{Error: "record not found", StatusCode: http.StatusNotFound}
 	} else {
 		return res[0], nil
 	}
@@ -204,6 +204,14 @@ func PutRowHandler(db *sql.DB) http.HandlerFunc {
 			w.Write([]byte(err.Error()))
 			return
 		}
+
+		idColumnName, errResp := getIdColumnName(db, table)
+		if errResp != nil {
+			writeResponse(w, nil, errResp)
+			return
+		}
+
+		delete(rowData, idColumnName)
 
 		res, err := PutRow(db, table, rowData)
 		writeResponse(w, &ResponseItems{Id: int(res)}, err)
