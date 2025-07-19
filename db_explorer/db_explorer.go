@@ -28,8 +28,9 @@ type ResponseItems struct {
 	Tables  []string  `json:"tables,omitempty"`
 	Record  RowData   `json:"record,omitempty"`
 	Records []RowData `json:"records,omitempty"`
-	Id      int64     `json:"id,omitempty"`
-	Updated int64     `json:"updated,omitempty"`
+	Id      *int64    `json:"id,omitempty"`
+	Updated *int64    `json:"updated,omitempty"`
+	Deleted *int64    `json:"deleted,omitempty"`
 }
 
 type ResponseError struct {
@@ -92,7 +93,7 @@ func (dbe *DBExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	} else if method == http.MethodPost {
 		PostRowHandler(dbe.DB)(w, r)
 	} else if method == http.MethodDelete {
-
+		DeleteRowHandler(dbe.DB)(w, r)
 	} else {
 		w.WriteHeader(http.StatusMethodNotAllowed)
 	}
@@ -216,7 +217,7 @@ func PutRowHandler(db *sql.DB) http.HandlerFunc {
 		delete(rowData, idColumnName)
 
 		res, err := CreateRow(db, table, rowData)
-		writeResponse(w, &ResponseItems{Id: res}, err)
+		writeResponse(w, &ResponseItems{Id: &res}, err)
 	}
 }
 
@@ -224,25 +225,34 @@ func CreateRow(db *sql.DB, table string, rowData map[string]interface{}) (int64,
 	query := fmt.Sprintf("INSERT INTO %s", table)
 
 	paramRow := make([]string, len(rowData))
-	valueRow := make([]string, len(rowData))
+	valueRow := make([]interface{}, len(rowData))
+	questionRow := make([]string, len(rowData))
+
+	// columnNames, errResp := getTableColumns(db, table)
+	// if errResp != nil {
+	// 	return 0, errResp
+	// }
 
 	i := 0
 	for colName, val := range rowData {
 		paramRow[i] = colName
-		valueRow[i] = fmt.Sprintf("'%v'", val)
+		valueRow[i] = val
+		questionRow[i] = "?"
 		i++
 	}
 
-	query += fmt.Sprintf(" (%s) VALUES (%s)", strings.Join(paramRow, ", "), strings.Join(valueRow, ", "))
+	query += fmt.Sprintf(" (%s) VALUES (%s)", strings.Join(paramRow, ", "), strings.Join(questionRow, ", "))
 
-	res, err := db.Exec(query)
+	fmt.Println(query)
+
+	res, err := db.Exec(query, valueRow...)
 	if err != nil {
-		return -1, &ResponseError{Error: err.Error()}
+		return 0, &ResponseError{Error: err.Error()}
 	}
 
 	id, err := res.LastInsertId()
 	if err != nil {
-		return -1, &ResponseError{Error: err.Error()}
+		return 0, &ResponseError{Error: err.Error()}
 	}
 	return id, nil
 }
@@ -277,7 +287,7 @@ func PostRowHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		res, err := UpdateRow(db, table, id, idColumnName, rowData)
-		writeResponse(w, &ResponseItems{Updated: res}, err)
+		writeResponse(w, &ResponseItems{Updated: &res}, err)
 	}
 }
 
@@ -292,11 +302,41 @@ func UpdateRow(db *sql.DB, table, id, idColumnName string, rowData map[string]in
 
 	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = %s", table, strings.Join(updateRow, ", "), idColumnName, id)
 
-	_, err := db.Exec(query)
+	res, err := db.Exec(query)
 	if err != nil {
-		return -1, &ResponseError{Error: err.Error()}
+		return 0, &ResponseError{Error: err.Error()}
 	}
-	return 1, nil
+
+	r, _ := res.RowsAffected()
+	return r, nil
+}
+
+func DeleteRowHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		urlParts := strings.Split(r.URL.Path, "/")
+		table := strings.Split(urlParts[1], "?")[0]
+		id := strings.Split(urlParts[2], "?")[0]
+
+		res, err := DeleteRowById(db, table, id)
+		writeResponse(w, &ResponseItems{Deleted: &res}, err)
+	}
+}
+
+func DeleteRowById(db *sql.DB, table, id string) (int64, *ResponseError) {
+	idColumnName, errResp := getIdColumnName(db, table)
+	if errResp != nil {
+		return 0, errResp
+	}
+
+	query := fmt.Sprintf("DELETE FROM %s WHERE %s = ?", table, idColumnName)
+
+	res, err := db.Exec(query, id)
+	if err != nil {
+		return 0, &ResponseError{Error: err.Error()}
+	}
+
+	r, _ := res.RowsAffected()
+	return r, nil
 }
 
 func unpackRows(rows *sql.Rows) ([]RowData, *ResponseError) {
@@ -424,4 +464,23 @@ func getTableTypes(db *sql.DB, table string) (map[string]string, map[string]bool
 	}
 
 	return types, nulls, nil
+}
+
+func getTableColumns(db *sql.DB, table string) ([]string, *ResponseError) {
+	rows, err := db.Query("SHOW COLUMNS FROM " + table)
+	if err != nil {
+		return nil, &ResponseError{Error: err.Error()}
+	}
+	defer rows.Close()
+
+	columns := make([]string, 0)
+	for rows.Next() {
+		var colName string
+		if err = rows.Scan(&colName); err != nil {
+			return nil, &ResponseError{Error: err.Error()}
+		}
+		columns = append(columns, colName)
+	}
+
+	return columns, nil
 }
