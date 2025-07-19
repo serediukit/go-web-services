@@ -26,8 +26,8 @@ type ResponseItems struct {
 	Tables  []string  `json:"tables,omitempty"`
 	Record  RowData   `json:"record,omitempty"`
 	Records []RowData `json:"records,omitempty"`
-	Id      int       `json:"id,omitempty"`
-	Updated int       `json:"updated,omitempty"`
+	Id      int64     `json:"id,omitempty"`
+	Updated int64     `json:"updated,omitempty"`
 }
 
 type ResponseError struct {
@@ -85,10 +85,10 @@ func (dbe *DBExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		default:
 			w.WriteHeader(http.StatusMethodNotAllowed)
 		}
-	} else if method == http.MethodPost {
-
 	} else if method == http.MethodPut {
 		PutRowHandler(dbe.DB)(w, r)
+	} else if method == http.MethodPost {
+		PostRowHandler(dbe.DB)(w, r)
 	} else if method == http.MethodDelete {
 
 	} else {
@@ -214,7 +214,7 @@ func PutRowHandler(db *sql.DB) http.HandlerFunc {
 		delete(rowData, idColumnName)
 
 		res, err := PutRow(db, table, rowData)
-		writeResponse(w, &ResponseItems{Id: int(res)}, err)
+		writeResponse(w, &ResponseItems{Id: res}, err)
 	}
 }
 
@@ -243,6 +243,52 @@ func PutRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, *R
 		return -1, &ResponseError{Error: err.Error()}
 	}
 	return id, nil
+}
+
+func PostRowHandler(db *sql.DB) http.HandlerFunc {
+	return func(w http.ResponseWriter, r *http.Request) {
+		urlParts := strings.Split(r.URL.Path, "/")
+		table := strings.Split(urlParts[1], "?")[0]
+		id := strings.Split(urlParts[2], "?")[0]
+
+		fmt.Println(table, id)
+
+		var rowData map[string]interface{}
+		if err := json.NewDecoder(r.Body).Decode(&rowData); err != nil {
+			w.WriteHeader(http.StatusBadRequest)
+			w.Write([]byte(err.Error()))
+			return
+		}
+
+		idColumnName, errResp := getIdColumnName(db, table)
+		if errResp != nil {
+			writeResponse(w, nil, errResp)
+			return
+		}
+
+		delete(rowData, idColumnName)
+
+		res, err := UpdateRow(db, table, id, idColumnName, rowData)
+		writeResponse(w, &ResponseItems{Updated: res}, err)
+	}
+}
+
+func UpdateRow(db *sql.DB, table, id, idColumnName string, rowData map[string]interface{}) (int64, *ResponseError) {
+	updateRow := make([]string, len(rowData))
+
+	i := 0
+	for colName, val := range rowData {
+		updateRow[i] = fmt.Sprintf("%s = '%v'", colName, val)
+		i++
+	}
+
+	query := fmt.Sprintf("UPDATE %s SET %s WHERE %s = %s", table, strings.Join(updateRow, ", "), idColumnName, id)
+
+	_, err := db.Exec(query)
+	if err != nil {
+		return -1, &ResponseError{Error: err.Error()}
+	}
+	return 1, nil
 }
 
 func unpackRows(rows *sql.Rows) ([]RowData, *ResponseError) {
