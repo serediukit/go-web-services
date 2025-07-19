@@ -22,6 +22,19 @@ func NewRow(l int) Row {
 
 type RowsData []map[string]interface{}
 
+type ResponseItems struct {
+	Tables  []string               `json:"tables,omitempty"`
+	Record  map[string]interface{} `json:"record,omitempty"`
+	Records RowsData               `json:"records,omitempty"`
+	Id      int                    `json:"id,omitempty"`
+	Updated int                    `json:"updated,omitempty"`
+}
+
+type Resp struct {
+	Response ResponseItems `json:"response,omitempty"`
+	Err      error         `json:"err,omitempty"`
+}
+
 type DBExplorer struct {
 	DB *sql.DB
 }
@@ -71,7 +84,14 @@ func GetTablesHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		resJson, err := json.Marshal(res)
+		response := Resp{
+			Response: ResponseItems{
+				Tables: res,
+			},
+			Err: err,
+		}
+
+		resJson, err := json.Marshal(response)
 		if err != nil {
 			w.WriteHeader(http.StatusInternalServerError)
 			w.Write([]byte(err.Error()))
@@ -120,12 +140,10 @@ func GetRowsHandler(db *sql.DB) http.HandlerFunc {
 
 		res, err := GetRows(db, table, limit, offset)
 		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
+			w.WriteHeader(http.StatusNotFound)
 			w.Write([]byte(err.Error()))
 			return
 		}
-
-		fmt.Println(res)
 
 		resJson, err := json.Marshal(res)
 		if err != nil {
