@@ -20,23 +20,48 @@ func NewRow(l int) Row {
 	}
 }
 
-type RowsData []map[string]interface{}
+type RowData map[string]interface{}
 
 type ResponseItems struct {
-	Tables  []string               `json:"tables,omitempty"`
-	Record  map[string]interface{} `json:"record,omitempty"`
-	Records RowsData               `json:"records,omitempty"`
-	Id      int                    `json:"id,omitempty"`
-	Updated int                    `json:"updated,omitempty"`
+	Tables  []string  `json:"tables,omitempty"`
+	Record  RowData   `json:"record,omitempty"`
+	Records []RowData `json:"records,omitempty"`
+	Id      int       `json:"id,omitempty"`
+	Updated int       `json:"updated,omitempty"`
+}
+
+type ResponseError struct {
+	Error      string
+	StatusCode int
 }
 
 type Resp struct {
-	Response ResponseItems `json:"response,omitempty"`
-	Err      error         `json:"err,omitempty"`
+	Response *ResponseItems `json:"response,omitempty"`
+	Err      string         `json:"error,omitempty"`
 }
 
 type DBExplorer struct {
 	DB *sql.DB
+}
+
+func writeResponse(w http.ResponseWriter, resp *ResponseItems, err *ResponseError) {
+	w.Header().Set("Content-Type", "application/json")
+
+	response := &Resp{}
+	if err != nil {
+		response.Err = err.Error
+		if err.StatusCode == 0 {
+			err.StatusCode = http.StatusInternalServerError
+		}
+		w.WriteHeader(err.StatusCode)
+	} else {
+		response.Response = resp
+		w.WriteHeader(http.StatusOK)
+	}
+
+	resJson, _ := json.Marshal(response)
+
+	w.Write(resJson)
 }
 
 func (dbe *DBExplorer) ServeHTTP(w http.ResponseWriter, r *http.Request) {
@@ -78,36 +103,14 @@ func NewDbExplorer(db *sql.DB) (http.Handler, error) {
 func GetTablesHandler(db *sql.DB) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
 		res, err := GetTables(db)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
-		response := Resp{
-			Response: ResponseItems{
-				Tables: res,
-			},
-			Err: err,
-		}
-
-		resJson, err := json.Marshal(response)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(resJson)
+		writeResponse(w, &ResponseItems{Tables: res}, err)
 	}
 }
 
-func GetTables(db *sql.DB) ([]string, error) {
+func GetTables(db *sql.DB) ([]string, *ResponseError) {
 	rows, err := db.Query("SHOW TABLES")
 	if err != nil {
-		return nil, err
+		return nil, &ResponseError{Error: err.Error()}
 	}
 	defer rows.Close()
 
@@ -115,7 +118,7 @@ func GetTables(db *sql.DB) ([]string, error) {
 	for rows.Next() {
 		var tableName string
 		if err = rows.Scan(&tableName); err != nil {
-			return nil, err
+			return nil, &ResponseError{Error: err.Error()}
 		}
 		tables = append(tables, tableName)
 	}
@@ -139,30 +142,15 @@ func GetRowsHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		res, err := GetRows(db, table, limit, offset)
-		if err != nil {
-			w.WriteHeader(http.StatusNotFound)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
-		resJson, err := json.Marshal(res)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(resJson)
+		writeResponse(w, &ResponseItems{Records: res}, err)
 	}
 }
 
-func GetRows(db *sql.DB, table, limit, offset string) (RowsData, error) {
+func GetRows(db *sql.DB, table, limit, offset string) ([]RowData, *ResponseError) {
 	query := fmt.Sprintf("SELECT * FROM %s LIMIT ? OFFSET ?", table)
 	rows, err := db.Query(query, limit, offset)
 	if err != nil {
-		return nil, err
+		return nil, &ResponseError{Error: "unknown table", StatusCode: http.StatusNotFound}
 	}
 	defer rows.Close()
 
@@ -176,41 +164,33 @@ func GetRowsByIDHandler(db *sql.DB) http.HandlerFunc {
 		id := strings.Split(urlParts[2], "?")[0]
 
 		res, err := GetRowsById(db, table, id)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
-		fmt.Println(res)
-
-		resJson, err := json.Marshal(res)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write(resJson)
+		writeResponse(w, &ResponseItems{Record: res}, err)
 	}
 }
 
-func GetRowsById(db *sql.DB, table, id string) (RowsData, error) {
-	idColumnName, err := getIdColumnName(db, table)
-	if err != nil {
-		return nil, err
+func GetRowsById(db *sql.DB, table, id string) (RowData, *ResponseError) {
+	idColumnName, errResp := getIdColumnName(db, table)
+	if errResp != nil {
+		return nil, errResp
 	}
 
 	query := fmt.Sprintf("SELECT * FROM %s WHERE %s = ?", table, idColumnName)
 	rows, err := db.Query(query, id)
 	if err != nil {
-		return nil, err
+		return nil, &ResponseError{Error: err.Error()}
 	}
 	defer rows.Close()
 
-	return unpackRows(rows)
+	res, errResp := unpackRows(rows)
+	if errResp != nil {
+		return nil, errResp
+	}
+
+	if res == nil || len(res) == 0 {
+		return nil, &ResponseError{Error: "unknown id", StatusCode: http.StatusNotFound}
+	} else {
+		return res[0], nil
+	}
 }
 
 func PutRowHandler(db *sql.DB) http.HandlerFunc {
@@ -226,19 +206,11 @@ func PutRowHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		res, err := PutRow(db, table, rowData)
-		if err != nil {
-			w.WriteHeader(http.StatusInternalServerError)
-			w.Write([]byte(err.Error()))
-			return
-		}
-
-		w.WriteHeader(http.StatusOK)
-		w.Header().Set("Content-Type", "application/json")
-		w.Write([]byte(fmt.Sprintf(`{"id": %d}`, res)))
+		writeResponse(w, &ResponseItems{Id: int(res)}, err)
 	}
 }
 
-func PutRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, error) {
+func PutRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, *ResponseError) {
 	query := fmt.Sprintf("INSERT INTO %s", table)
 
 	paramRow := make([]string, len(rowData))
@@ -255,19 +227,23 @@ func PutRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, er
 
 	res, err := db.Exec(query)
 	if err != nil {
-		return -1, err
+		return -1, &ResponseError{Error: err.Error()}
 	}
 
-	return res.LastInsertId()
+	id, err := res.LastInsertId()
+	if err != nil {
+		return -1, &ResponseError{Error: err.Error()}
+	}
+	return id, nil
 }
 
-func unpackRows(rows *sql.Rows) (RowsData, error) {
+func unpackRows(rows *sql.Rows) ([]RowData, *ResponseError) {
 	columns, err := rows.Columns()
 	if err != nil {
-		return nil, err
+		return nil, &ResponseError{Error: err.Error()}
 	}
 
-	res := make(RowsData, 0)
+	res := make([]RowData, 0)
 
 	for rows.Next() {
 		row := NewRow(len(columns))
@@ -277,7 +253,7 @@ func unpackRows(rows *sql.Rows) (RowsData, error) {
 		}
 
 		if err = rows.Scan(row.ColumnPointers...); err != nil {
-			return nil, err
+			return nil, &ResponseError{Error: err.Error()}
 		}
 
 		rowData := make(map[string]interface{})
@@ -296,17 +272,17 @@ func unpackRows(rows *sql.Rows) (RowsData, error) {
 	return res, nil
 }
 
-func getIdColumnName(db *sql.DB, table string) (string, error) {
+func getIdColumnName(db *sql.DB, table string) (string, *ResponseError) {
 	rows, err := db.Query("SELECT COLUMN_NAME FROM information_schema.KEY_COLUMN_USAGE WHERE TABLE_NAME = ? AND CONSTRAINT_NAME = 'PRIMARY'", table)
 	if err != nil {
-		return "", err
+		return "", &ResponseError{Error: err.Error()}
 	}
 	defer rows.Close()
 
 	for rows.Next() {
 		var id string
 		if err = rows.Scan(&id); err != nil {
-			return "", err
+			return "", &ResponseError{Error: err.Error()}
 		}
 		return id, nil
 	}
