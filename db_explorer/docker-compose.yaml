@@ -16,3 +16,4 @@ services:
       MYSQL_DATABASE: dbcrud
     volumes:
       - './_mysql/:/docker-entrypoint-initdb.d/'
+      - './mysql-data:/var/lib/mysql'

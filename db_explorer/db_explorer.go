@@ -4,7 +4,9 @@ import (
 	"database/sql"
 	"encoding/json"
 	"fmt"
+	"io"
 	"net/http"
+	"slices"
 	"strings"
 )
 
@@ -251,10 +253,15 @@ func PostRowHandler(db *sql.DB) http.HandlerFunc {
 		table := strings.Split(urlParts[1], "?")[0]
 		id := strings.Split(urlParts[2], "?")[0]
 
-		var rowData map[string]interface{}
-		if err := json.NewDecoder(r.Body).Decode(&rowData); err != nil {
-			w.WriteHeader(http.StatusBadRequest)
-			w.Write([]byte(err.Error()))
+		rowData, err := getRowData(r.Body)
+		if err != nil {
+			writeResponse(w, nil, err)
+			return
+		}
+
+		err = validateRowData(db, table, rowData)
+		if err != nil {
+			writeResponse(w, nil, err)
 			return
 		}
 
@@ -265,7 +272,6 @@ func PostRowHandler(db *sql.DB) http.HandlerFunc {
 		}
 
 		if _, ok := rowData[idColumnName]; ok {
-			w.WriteHeader(http.StatusBadRequest)
 			writeResponse(w, nil, &ResponseError{Error: fmt.Sprintf("field %s have invalid type", idColumnName), StatusCode: http.StatusBadRequest})
 			return
 		}
@@ -348,4 +354,74 @@ func getIdColumnName(db *sql.DB, table string) (string, *ResponseError) {
 	}
 
 	return "", nil
+}
+
+func getRowData(body io.ReadCloser) (map[string]interface{}, *ResponseError) {
+	var rowData map[string]interface{}
+	if err := json.NewDecoder(body).Decode(&rowData); err != nil {
+		return nil, &ResponseError{Error: err.Error()}
+	}
+	return rowData, nil
+}
+
+func validateRowData(db *sql.DB, table string, rowData map[string]interface{}) *ResponseError {
+	tableTypes, nullTypes, err := getTableTypes(db, table)
+	if err != nil {
+		return err
+	}
+
+	for colName, val := range rowData {
+		if _, ok := tableTypes[colName]; !ok {
+			return &ResponseError{Error: "field doesn't exist", StatusCode: http.StatusBadRequest}
+		}
+
+		if val == nil {
+			if nullTypes[colName] {
+				continue
+			}
+			return &ResponseError{Error: fmt.Sprintf("field %s have invalid type", colName), StatusCode: http.StatusBadRequest}
+		}
+
+		switch val.(type) {
+		case float64:
+			if tableTypes[colName] != "int" {
+				return &ResponseError{Error: fmt.Sprintf("field %s have invalid type", colName), StatusCode: http.StatusBadRequest}
+			}
+		case string:
+			if !slices.Contains([]string{"text", "varchar"}, tableTypes[colName]) {
+				return &ResponseError{Error: fmt.Sprintf("field %s have invalid type", colName), StatusCode: http.StatusBadRequest}
+			}
+		default:
+			return &ResponseError{Error: "unknown field type", StatusCode: http.StatusBadRequest}
+		}
+	}
+
+	return nil
+}
+
+func getTableTypes(db *sql.DB, table string) (map[string]string, map[string]bool, *ResponseError) {
+	rows, err := db.Query("SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE FROM information_schema.COLUMNS WHERE TABLE_NAME = ?", table)
+	if err != nil {
+		panic(err)
+	}
+	defer rows.Close()
+
+	types := make(map[string]string)
+	nulls := make(map[string]bool)
+	for rows.Next() {
+		var colName string
+		var dataType string
+		var isNullable string
+		if err = rows.Scan(&colName, &dataType, &isNullable); err != nil {
+			return nil, nil, &ResponseError{Error: err.Error()}
+		}
+		types[colName] = dataType
+		if isNullable == "YES" {
+			nulls[colName] = true
+		} else {
+			nulls[colName] = false
+		}
+	}
+
+	return types, nulls, nil
 }
