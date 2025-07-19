@@ -114,7 +114,7 @@ func GetTables(db *sql.DB) ([]string, *ResponseError) {
 	}
 	defer rows.Close()
 
-	tables := []string{}
+	var tables []string
 	for rows.Next() {
 		var tableName string
 		if err = rows.Scan(&tableName); err != nil {
@@ -213,12 +213,12 @@ func PutRowHandler(db *sql.DB) http.HandlerFunc {
 
 		delete(rowData, idColumnName)
 
-		res, err := PutRow(db, table, rowData)
+		res, err := CreateRow(db, table, rowData)
 		writeResponse(w, &ResponseItems{Id: res}, err)
 	}
 }
 
-func PutRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, *ResponseError) {
+func CreateRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, *ResponseError) {
 	query := fmt.Sprintf("INSERT INTO %s", table)
 
 	paramRow := make([]string, len(rowData))
@@ -251,8 +251,6 @@ func PostRowHandler(db *sql.DB) http.HandlerFunc {
 		table := strings.Split(urlParts[1], "?")[0]
 		id := strings.Split(urlParts[2], "?")[0]
 
-		fmt.Println(table, id)
-
 		var rowData map[string]interface{}
 		if err := json.NewDecoder(r.Body).Decode(&rowData); err != nil {
 			w.WriteHeader(http.StatusBadRequest)
@@ -266,7 +264,11 @@ func PostRowHandler(db *sql.DB) http.HandlerFunc {
 			return
 		}
 
-		delete(rowData, idColumnName)
+		if _, ok := rowData[idColumnName]; ok {
+			w.WriteHeader(http.StatusBadRequest)
+			writeResponse(w, nil, &ResponseError{Error: fmt.Sprintf("field %s have invalid type", idColumnName), StatusCode: http.StatusBadRequest})
+			return
+		}
 
 		res, err := UpdateRow(db, table, id, idColumnName, rowData)
 		writeResponse(w, &ResponseItems{Updated: res}, err)
@@ -314,7 +316,11 @@ func unpackRows(rows *sql.Rows) ([]RowData, *ResponseError) {
 		for i, colName := range columns {
 			val := row.ColumnValues[i]
 			if b, ok := val.([]byte); ok {
-				rowData[colName] = string(b)
+				if string(b) == "<nil>" {
+					rowData[colName] = nil
+				} else {
+					rowData[colName] = string(b)
+				}
 			} else {
 				rowData[colName] = val
 			}
