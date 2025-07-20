@@ -224,14 +224,37 @@ func PutRowHandler(db *sql.DB) http.HandlerFunc {
 func CreateRow(db *sql.DB, table string, rowData map[string]interface{}) (int64, *ResponseError) {
 	query := fmt.Sprintf("INSERT INTO %s", table)
 
+	columnTypes, nullColumns, errResp := getTableTypes(db, table)
+	if errResp != nil {
+		return 0, errResp
+	}
+
+	for colName, isNullable := range nullColumns {
+		if _, ok := rowData[colName]; !ok {
+			if !isNullable {
+				if columnTypes[colName] == "int" {
+					rowData[colName] = 0
+				} else {
+					rowData[colName] = ""
+				}
+			}
+		}
+	}
+
+	columnNames, errResp := getTableColumns(db, table)
+	if errResp != nil {
+		return 0, errResp
+	}
+
+	for colName := range rowData {
+		if !slices.Contains(columnNames, colName) {
+			delete(rowData, colName)
+		}
+	}
+
 	paramRow := make([]string, len(rowData))
 	valueRow := make([]interface{}, len(rowData))
 	questionRow := make([]string, len(rowData))
-
-	// columnNames, errResp := getTableColumns(db, table)
-	// if errResp != nil {
-	// 	return 0, errResp
-	// }
 
 	i := 0
 	for colName, val := range rowData {
@@ -244,6 +267,9 @@ func CreateRow(db *sql.DB, table string, rowData map[string]interface{}) (int64,
 	query += fmt.Sprintf(" (%s) VALUES (%s)", strings.Join(paramRow, ", "), strings.Join(questionRow, ", "))
 
 	fmt.Println(query)
+	fmt.Println(rowData)
+	fmt.Println(paramRow)
+	fmt.Println(valueRow)
 
 	res, err := db.Exec(query, valueRow...)
 	if err != nil {
@@ -467,7 +493,13 @@ func getTableTypes(db *sql.DB, table string) (map[string]string, map[string]bool
 }
 
 func getTableColumns(db *sql.DB, table string) ([]string, *ResponseError) {
-	rows, err := db.Query("SHOW COLUMNS FROM " + table)
+	var dbName string
+	err := db.QueryRow("SELECT DATABASE()").Scan(&dbName)
+	if err != nil {
+		return nil, &ResponseError{Error: err.Error()}
+	}
+
+	rows, err := db.Query("SELECT COLUMN_NAME FROM information_schema.COLUMNS WHERE TABLE_NAME = ? AND TABLE_SCHEMA = ?", table, dbName)
 	if err != nil {
 		return nil, &ResponseError{Error: err.Error()}
 	}

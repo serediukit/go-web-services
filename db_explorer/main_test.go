@@ -95,7 +95,7 @@ func TestApis(t *testing.T) {
 	PrepareTestApis(db)
 
 	// возможно вам будет удобно закомментировать это чтобы смотреть результат после теста
-	defer CleanupTestApis(db)
+	//defer CleanupTestApis(db)
 
 	handler, err := NewDbExplorer(db)
 	if err != nil {
@@ -509,7 +509,7 @@ func runCases(t *testing.T, ts *httptest.Server, db *sql.DB, cases []Case) {
 			req      *http.Request
 		)
 
-		caseName := fmt.Sprintf("case %d: [%s] %s %s", idx, item.Method, item.Path, item.Query)
+		caseName := fmt.Sprintf("case %d/%d: [%s] %s %s", idx, len(cases), item.Method, item.Path, item.Query)
 
 		// если у вас случилась это ошибка - значит вы не делаете где-то rows.Close и у вас текут соединения с базой
 		// если такое случилось на первом тесте - значит вы не закрываете коннект где-то при иницаилизации в NewDbExplorer
