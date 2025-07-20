@@ -7,6 +7,7 @@ import (
 	"io"
 	"net/http"
 	"slices"
+	"strconv"
 	"strings"
 )
 
@@ -28,10 +29,11 @@ type ResponseItems struct {
 	Tables  []string  `json:"tables,omitempty"`
 	Record  RowData   `json:"record,omitempty"`
 	Records []RowData `json:"records,omitempty"`
-	Id      *int64    `json:"id,omitempty"`
 	Updated *int64    `json:"updated,omitempty"`
 	Deleted *int64    `json:"deleted,omitempty"`
 }
+
+type ResponseID map[string]*int64
 
 type ResponseError struct {
 	Error      string
@@ -39,15 +41,15 @@ type ResponseError struct {
 }
 
 type Resp struct {
-	Response *ResponseItems `json:"response,omitempty"`
-	Err      string         `json:"error,omitempty"`
+	Response interface{} `json:"response,omitempty"`
+	Err      string      `json:"error,omitempty"`
 }
 
 type DBExplorer struct {
 	DB *sql.DB
 }
 
-func writeResponse(w http.ResponseWriter, resp *ResponseItems, err *ResponseError) {
+func writeResponse(w http.ResponseWriter, resp interface{}, err *ResponseError) {
 	w.Header().Set("Content-Type", "application/json")
 
 	response := &Resp{}
@@ -134,22 +136,22 @@ func GetRowsHandler(db *sql.DB) http.HandlerFunc {
 		urlPart := strings.Split(r.URL.Path, "/")[1]
 		table := strings.Split(urlPart, "?")[0]
 
-		limit := r.URL.Query().Get("limit")
-		if limit == "" {
-			limit = "5"
+		limit, err := strconv.Atoi(r.URL.Query().Get("limit"))
+		if err != nil {
+			limit = 5
 		}
 
-		offset := r.URL.Query().Get("offset")
-		if offset == "" {
-			offset = "0"
+		offset, err := strconv.Atoi(r.URL.Query().Get("offset"))
+		if err != nil {
+			offset = 0
 		}
 
-		res, err := GetRows(db, table, limit, offset)
-		writeResponse(w, &ResponseItems{Records: res}, err)
+		res, errResp := GetRows(db, table, limit, offset)
+		writeResponse(w, &ResponseItems{Records: res}, errResp)
 	}
 }
 
-func GetRows(db *sql.DB, table, limit, offset string) ([]RowData, *ResponseError) {
+func GetRows(db *sql.DB, table string, limit, offset int) ([]RowData, *ResponseError) {
 	query := fmt.Sprintf("SELECT * FROM %s LIMIT ? OFFSET ?", table)
 	rows, err := db.Query(query, limit, offset)
 	if err != nil {
@@ -217,7 +219,7 @@ func PutRowHandler(db *sql.DB) http.HandlerFunc {
 		delete(rowData, idColumnName)
 
 		res, err := CreateRow(db, table, rowData)
-		writeResponse(w, &ResponseItems{Id: &res}, err)
+		writeResponse(w, &ResponseID{idColumnName: &res}, err)
 	}
 }
 
@@ -265,11 +267,6 @@ func CreateRow(db *sql.DB, table string, rowData map[string]interface{}) (int64,
 	}
 
 	query += fmt.Sprintf(" (%s) VALUES (%s)", strings.Join(paramRow, ", "), strings.Join(questionRow, ", "))
-
-	fmt.Println(query)
-	fmt.Println(rowData)
-	fmt.Println(paramRow)
-	fmt.Println(valueRow)
 
 	res, err := db.Exec(query, valueRow...)
 	if err != nil {
