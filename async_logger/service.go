@@ -2,6 +2,9 @@ package main
 
 import (
 	"context"
+	"encoding/json"
+	"fmt"
+	"strings"
 	"sync"
 	"time"
 )
@@ -160,4 +163,62 @@ func (sc *StatisticsCollector) Collect() *Stat {
 	sc.reset()
 
 	return &stat
+}
+
+type aclMethods [][]string
+
+type aclAuth struct {
+	acl map[string]aclMethods
+}
+
+func newAclAuth(aclData string) (*aclAuth, error) {
+	acl := make(map[string][]string)
+	if err := json.Unmarshal([]byte(aclData), &acl); err != nil {
+		return nil, fmt.Errorf("failed to parse ACL data: %s", err)
+	}
+
+	auth := &aclAuth{
+		acl: make(map[string]aclMethods, len(acl)),
+	}
+
+	for consumer, methods := range acl {
+		auth.acl[consumer] = make(aclMethods, len(methods))
+		for i, method := range methods {
+			auth.acl[consumer][i] = strings.Split(method, "/")
+		}
+	}
+
+	return auth, nil
+}
+
+func (aa *aclAuth) isAllowed(consumer string, method string) bool {
+	methodParts := strings.Split(method, "/")
+
+	if allowedMethods, ok := aa.acl[consumer]; ok {
+	allowedLoop:
+		for _, allowedMethod := range allowedMethods {
+			if len(allowedMethod) > len(methodParts) {
+				continue
+			}
+
+			for methodIndex, methodPart := range allowedMethod {
+				if methodParts[methodIndex] == methodPart || methodPart == "*" {
+					continue
+				} else {
+					break allowedLoop
+				}
+			}
+
+			return true
+		}
+	}
+
+	return false
+}
+
+func StartMyMicroservice(ctx context.Context, listenAddr string, aclData string) error {
+	acl, err := newAclAuth(aclData)
+	if err != nil {
+		return err
+	}
 }
