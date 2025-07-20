@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"sync"
+	"time"
 )
 
 // тут вы пишете код
@@ -33,12 +34,42 @@ type AdminServerImpl struct {
 	subs *EventSubs
 }
 
-func (s *AdminServerImpl) Logging(_ *Nothing, srv Admin_LoggingServer) (*Event, error) {
-	return &Event{}, nil
+func (s *AdminServerImpl) Logging(_ *Nothing, srv Admin_LoggingServer) error {
+	id, events := s.subs.NewSub()
+	defer s.subs.RemoveSub(id)
+
+	for e := range events {
+		if err := srv.Send(e); err != nil {
+			return err
+		}
+	}
+
+	return nil
 }
 
-func (s *AdminServerImpl) Statistics(_ *StatInterval, srv Admin_StatisticsServer) (*Stat, error) {
-	return &Stat{}, nil
+func (s *AdminServerImpl) Statistics(si *StatInterval, srv Admin_StatisticsServer) error {
+	id, events := s.subs.NewSub()
+	defer s.subs.RemoveSub(id)
+
+	statistics := newStatisticsCollector()
+
+	t := time.NewTicker(time.Duration(si.IntervalSeconds) * time.Second)
+	defer t.Stop()
+
+	for {
+		select {
+		case e, ok := <-events:
+			if ok {
+				statistics.Update(e)
+			} else {
+				return nil
+			}
+		case <-t.C:
+			if err := srv.Send(statistics.Collect()); err != nil {
+				return err
+			}
+		}
+	}
 }
 
 func NewAdminServer() *AdminServerImpl {
