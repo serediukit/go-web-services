@@ -72,8 +72,8 @@ func (s *AdminServerImpl) Statistics(si *StatInterval, srv Admin_StatisticsServe
 	}
 }
 
-func NewAdminServer() *AdminServerImpl {
-	return &AdminServerImpl{}
+func NewAdminServer(s *EventSubs) *AdminServerImpl {
+	return &AdminServerImpl{subs: s}
 }
 
 type EventSubs struct {
@@ -82,7 +82,7 @@ type EventSubs struct {
 	mux  *sync.Mutex
 }
 
-func NewEventSubs() *EventSubs {
+func newEventSubs() *EventSubs {
 	return &EventSubs{
 		subs: map[int]chan *Event{},
 		mux:  &sync.Mutex{},
@@ -126,4 +126,38 @@ func (es *EventSubs) Notify(e *Event) {
 	for _, ch := range es.subs {
 		ch <- e
 	}
+}
+
+type StatisticsCollector struct {
+	stat Stat
+}
+
+func newStatisticsCollector() *StatisticsCollector {
+	s := &StatisticsCollector{}
+	s.reset()
+
+	return s
+}
+
+func (sc *StatisticsCollector) reset() {
+	sc.stat = Stat{
+		ByMethod:   map[string]uint64{},
+		ByConsumer: map[string]uint64{},
+	}
+}
+
+func (sc *StatisticsCollector) Update(e *Event) {
+	sc.stat.ByMethod[e.Method]++
+	sc.stat.ByConsumer[e.Consumer]++
+}
+
+func (sc *StatisticsCollector) Collect() *Stat {
+	stat := Stat{
+		ByMethod:   sc.stat.ByMethod,
+		ByConsumer: sc.stat.ByConsumer,
+	}
+	stat.Timestamp = time.Now().Unix()
+	sc.reset()
+
+	return &stat
 }
