@@ -4,6 +4,12 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/metadata"
+	"google.golang.org/grpc/peer"
+	"google.golang.org/grpc/status"
+	"net"
 	"strings"
 	"sync"
 	"time"
@@ -216,9 +222,78 @@ func (aa *aclAuth) isAllowed(consumer string, method string) bool {
 	return false
 }
 
+type middleware struct {
+	ServerOptions []grpc.ServerOption
+	auth          *aclAuth
+	subs          *EventSubs
+}
+
+func newAuthMiddleware(auth *aclAuth, subs *EventSubs) *middleware {
+	mw := &middleware{
+		auth: auth,
+		subs: subs,
+	}
+	mw.ServerOptions = []grpc.ServerOption{
+		grpc.UnaryInterceptor(mw.unaryInterceptor),
+		grpc.StreamInterceptor(mw.streamInterceptor),
+	}
+
+	return mw
+}
+
+func (mw *middleware) unaryInterceptor(ctx context.Context, req interface{}, info *grpc.UnaryServerInfo, handler grpc.UnaryHandler) (interface{}, error) {
+	if err := mw.process(ctx, info.FullMethod); err != nil {
+		return nil, err
+	}
+
+	return handler(ctx, req)
+}
+
+func (mw *middleware) streamInterceptor(srv interface{}, ss grpc.ServerStream, info *grpc.StreamServerInfo, handler grpc.StreamHandler) error {
+	if err := mw.process(ss.Context(), info.FullMethod); err != nil {
+		return err
+	}
+
+	return handler(srv, ss)
+}
+
+func (mw *middleware) process(ctx context.Context, method string) error {
+	md, _ := metadata.FromIncomingContext(ctx)
+
+	consumer := strings.Join(md.Get("consumer"), "")
+
+	host := ""
+	if p, ok := peer.FromContext(ctx); ok {
+		host = p.Addr.String()
+	}
+
+	mw.subs.Notify(&Event{
+		Method:    method,
+		Consumer:  consumer,
+		Host:      host,
+		Timestamp: time.Now().Unix(),
+	})
+
+	if !mw.auth.isAllowed(consumer, method) {
+		return status.Errorf(codes.Unauthenticated, "access denied")
+	}
+
+	return nil
+}
+
 func StartMyMicroservice(ctx context.Context, listenAddr string, aclData string) error {
 	acl, err := newAclAuth(aclData)
 	if err != nil {
 		return err
 	}
+
+	l, err := net.Listen("tcp", listenAddr)
+	if err != nil {
+		return err
+	}
+
+	subs := newEventSubs()
+	mw := newAuthMiddleware(aclAuth, subs)
+
+	server := grpc.NewServer(mw.ServerOptions...)
 }
