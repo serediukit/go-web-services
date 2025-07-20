@@ -20,6 +20,22 @@ func (s *BizServerImpl) Test(context.Context, *Nothing) (*Nothing, error) {
 	return &Nothing{}, nil
 }
 
-func NewBizServer() BizServer {
+func NewBizServer() *BizServerImpl {
 	return &BizServerImpl{}
+}
+
+type AdminServerImpl struct {
+	UnimplementedAdminServer
+}
+
+func (s *AdminServerImpl) Logging(context.Context, *Nothing) (*Event, error) {
+	return &Event{}, nil
+}
+
+func (s *AdminServerImpl) Statistics(context.Context, *StatInterval) (*Stat, error) {
+	return &Stat{}, nil
+}
+
+func NewAdminServer() *AdminServerImpl {
+	return &AdminServerImpl{}
 }
