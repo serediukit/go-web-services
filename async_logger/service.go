@@ -293,7 +293,27 @@ func StartMyMicroservice(ctx context.Context, listenAddr string, aclData string)
 	}
 
 	subs := newEventSubs()
-	mw := newAuthMiddleware(aclAuth, subs)
+	mw := newAuthMiddleware(acl, subs)
 
 	server := grpc.NewServer(mw.ServerOptions...)
+
+	RegisterBizServer(server, NewBizServer())
+	RegisterAdminServer(server, NewAdminServer(subs))
+
+	go func() {
+		err := server.Serve(l)
+		if err != nil {
+			fmt.Printf("cant start server: %v", err)
+		}
+	}()
+
+	go func() {
+		<-ctx.Done()
+
+		subs.RemoveAll()
+
+		server.GracefulStop()
+	}()
+
+	return nil
 }
