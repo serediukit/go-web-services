@@ -6,21 +6,37 @@ import (
 )
 
 func i2s(data interface{}, out interface{}) error {
-	fmt.Printf("\nGOT:\n%T\n%#v\nOUT:\n%T\n%#v\n\n", data, data, out, out)
+	// fmt.Printf("\nGOT:\n%T\n%#v\nOUT:\n%T\n%#v\n\n", data, data, out, out)
 
 	value := reflect.ValueOf(out)
-	fmt.Printf("Value:%+v\n", value)
 
 	if value.Kind() != reflect.Ptr {
 		return fmt.Errorf("data must be a pointer")
 	}
 
 	value = value.Elem()
-	fmt.Printf("Value:%+v\n", value)
 
 	switch value.Kind() {
 	case reflect.Struct:
-		fmt.Printf("Struct:%+v\n", value)
+		d, ok := data.(map[string]interface{})
+
+		if !ok {
+			return fmt.Errorf("data is not a map")
+		}
+
+		for i := 0; i < value.NumField(); i++ {
+			fieldName := value.Type().Field(i).Name
+
+			v, ok := d[fieldName]
+
+			if !ok {
+				return fmt.Errorf("field %s not found", fieldName)
+			}
+
+			if err := i2s(v, value.Field(i).Addr().Interface()); err != nil {
+				return fmt.Errorf("failed to reflect struct %s", fieldName)
+			}
+		}
 	case reflect.Slice:
 		fmt.Printf("Slice:%+v\n", value)
 	case reflect.Int:
