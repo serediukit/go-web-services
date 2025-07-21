@@ -7,15 +7,15 @@ import (
 	// "fmt"
 )
 
-type Simple struct {
-	ID       int
-	Username string
-	Active   bool
-}
-
-type IDBlock struct {
-	ID int
-}
+// type Simple struct {
+// 	ID       int
+// 	Username string
+// 	Active   bool
+// }
+//
+// type IDBlock struct {
+// 	ID int
+// }
 
 func TestSimple(t *testing.T) {
 	expected := &Simple{
