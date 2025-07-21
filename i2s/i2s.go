@@ -7,7 +7,6 @@ import (
 
 func i2s(data interface{}, out interface{}) error {
 	// fmt.Printf("\nGOT:\n%T\n%#v\nOUT:\n%T\n%#v\n\n", data, data, out, out)
-
 	value := reflect.ValueOf(out)
 
 	if value.Kind() != reflect.Ptr {
@@ -21,7 +20,7 @@ func i2s(data interface{}, out interface{}) error {
 		d, ok := data.(map[string]interface{})
 
 		if !ok {
-			return fmt.Errorf("data is not a map")
+			return fmt.Errorf("data must be a map")
 		}
 
 		for i := 0; i < value.NumField(); i++ {
@@ -37,8 +36,24 @@ func i2s(data interface{}, out interface{}) error {
 				return fmt.Errorf("failed to reflect struct %s", fieldName)
 			}
 		}
+
 	case reflect.Slice:
-		fmt.Printf("Slice:%+v\n", value)
+		d, ok := data.([]interface{})
+
+		if !ok {
+			return fmt.Errorf("data must be a slice")
+		}
+
+		for i, item := range d {
+			elem := reflect.New(value.Type().Elem())
+
+			if err := i2s(item, elem.Interface()); err != nil {
+				return fmt.Errorf("failed to reflect slice element %d: %s", i, err)
+			}
+
+			value.Set(reflect.Append(value, elem.Elem()))
+		}
+
 	case reflect.Int:
 		d, ok := data.(float64)
 
